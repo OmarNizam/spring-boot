@@ -35,7 +35,17 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
 empty_tree="$(git hash-object -t tree /dev/null)"
+
+# True when $1 is empty or all-whitespace. (Avoid ${v//[[:space:]]/} — it is
+# pathologically slow on multi-KB strings in bash 3.2, which ships on macOS.)
+is_blank() { case "$1" in *[![:space:]]*) return 1 ;; *) return 0 ;; esac; }
+
 REVIEW_TIMEOUT="${CODE_REVIEW_TIMEOUT:-600}"
+case "$REVIEW_TIMEOUT" in
+  ''|*[!0-9]*|0|0[0-9]*)
+    echo "pre-push: invalid CODE_REVIEW_TIMEOUT='$REVIEW_TIMEOUT' — using 600." >&2
+    REVIEW_TIMEOUT=600 ;;
+esac
 
 is_zero() { case "$1" in *[!0]*) return 1 ;; *) return 0 ;; esac; }
 
@@ -79,10 +89,18 @@ ranges="$(printf '%s\n' "$ranges" | sed '/^$/d')"
 diff=""
 stat=""
 labels=""
+diff_failed=""
 while read -r base tip; do
   [ -z "${base:-}" ] && continue
-  d="$(git diff --no-color "$base" "$tip" 2>/dev/null || true)"
-  [ -z "${d//[[:space:]]/}" ] && continue
+  # `git diff` (no --exit-code) returns 0 whether or not there are changes;
+  # a non-zero status here means the command itself failed — e.g. $base is a
+  # remote sha this clone has never fetched. Don't fold that into "no changes".
+  if ! d="$(git diff --no-color "$base" "$tip" 2>/dev/null)"; then
+    echo "pre-push: could not diff ${base}..${tip} (unfetched object?) — skipping that range." >&2
+    diff_failed=1
+    continue
+  fi
+  is_blank "$d" && continue
   s="$(git diff --stat "$base" "$tip" 2>/dev/null || true)"
   short="$(git rev-parse --short "$base" 2>/dev/null || echo "${base:0:12}")..$(git rev-parse --short "$tip" 2>/dev/null || echo "${tip:0:12}")"
   labels="$labels $short"
@@ -97,8 +115,12 @@ done <<EOF
 $ranges
 EOF
 
-if [ -z "${diff//[[:space:]]/}" ]; then
-  echo "pre-push: no code changes to review."
+if is_blank "$diff"; then
+  if [ -n "$diff_failed" ]; then
+    echo "pre-push: no reviewable diff (diff errors above) — allowing push." >&2
+  else
+    echo "pre-push: no code changes to review."
+  fi
   exit 0
 fi
 
@@ -182,7 +204,14 @@ printf '%s\n' "$review"
 echo "─────────────────────────────────────────────────────────────────────"
 echo
 
-verdict="$(printf '%s\n' "$review" | grep -oE 'REVIEW_RESULT:[[:space:]]*(PASS|BLOCK)' | tail -n1 || true)"
+# The verdict is the agent's final line. Prefer the last non-blank line; only if
+# that isn't a verdict line fall back to the last anchored match anywhere, so a
+# REVIEW_RESULT string quoted inside the reviewed diff can't be mistaken for it.
+verdict="$(printf '%s\n' "$review" | awk 'NF{last=$0} END{print last}')"
+case "$verdict" in
+  *REVIEW_RESULT:*PASS*|*REVIEW_RESULT:*BLOCK*) ;;
+  *) verdict="$(printf '%s\n' "$review" | grep -E '^[[:space:]]*REVIEW_RESULT:[[:space:]]*(PASS|BLOCK)[[:space:]]*$' | tail -n1 || true)" ;;
+esac
 
 case "$verdict" in
   *BLOCK*)
