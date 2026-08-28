@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+#
+# pre-push: run the Claude Code "code-reviewer" subagent against the commits
+# being pushed. Blocks the push if the review reports a 🔴 blocker.
+#
+# This hook is tracked in .githooks/. Activate it once per clone with:
+#     git config core.hooksPath .githooks
+#
+# Bypass:  git push --no-verify        (skips all hooks)
+#     or:  SKIP_CODE_REVIEW=1 git push (skips just this review)
+#
+set -euo pipefail
+
+if [ "${SKIP_CODE_REVIEW:-0}" = "1" ]; then
+  echo "pre-push: SKIP_CODE_REVIEW=1 — skipping code review."
+  exit 0
+fi
+
+CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+if ! [ -x "$CLAUDE_BIN" ]; then
+  CLAUDE_BIN="$(command -v claude || true)"
+fi
+if [ -z "$CLAUDE_BIN" ] || ! [ -x "$CLAUDE_BIN" ]; then
+  echo "pre-push: 'claude' CLI not found — skipping code review." >&2
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+z40=0000000000000000000000000000000000000000
+range=""
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>  (one line per ref)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "${local_sha:-}" ] && continue
+  # nothing to push for this ref (deletion)
+  if [ "$local_sha" = "$z40" ]; then
+    continue
+  fi
+  if [ "$remote_sha" = "$z40" ]; then
+    # new branch on the remote: review commits not on any other remote ref
+    base="$(git rev-list "$local_sha" --not --remotes 2>/dev/null | tail -n1 || true)"
+    if [ -n "$base" ]; then
+      parent="$(git rev-parse "${base}^" 2>/dev/null || true)"
+      range="${parent:+$parent..}$local_sha"
+    else
+      range="$local_sha"
+    fi
+  else
+    range="$remote_sha..$local_sha"
+  fi
+done
+
+if [ -z "$range" ]; then
+  exit 0
+fi
+
+diff="$(git diff --no-color "$range" 2>/dev/null || true)"
+if [ -z "${diff//[[:space:]]/}" ]; then
+  echo "pre-push: no code changes in $range — skipping review."
+  exit 0
+fi
+
+stat="$(git diff --stat "$range" 2>/dev/null || true)"
+
+echo "pre-push: reviewing $range with the code-reviewer subagent…"
+
+prompt="$(cat <<EOF
+Use the code-reviewer subagent to review the changes about to be pushed
+(git range: $range).
+
+Files changed:
+$stat
+
+Unified diff follows. Read the changed files in the working tree for extra
+context as needed, then produce the review in the format the subagent defines.
+
+Relay the full review from the subagent verbatim, and make the LAST line of
+your response exactly one of these, on its own line with nothing after it:
+  REVIEW_RESULT: PASS
+  REVIEW_RESULT: BLOCK
+Use BLOCK if the review contains any 🔴 blocker, otherwise PASS.
+
+--- BEGIN DIFF ---
+$diff
+--- END DIFF ---
+EOF
+)"
+
+set +e
+review="$(
+  "$CLAUDE_BIN" -p "$prompt" \
+    --allowedTools "Task Read Grep Glob" \
+    2>/dev/null
+)"
+status=$?
+set -e
+
+if [ $status -ne 0 ]; then
+  echo "pre-push: code review did not complete (claude exit $status) — allowing push." >&2
+  exit 0
+fi
+
+echo
+echo "──────────────────────────── code review ────────────────────────────"
+echo "$review"
+echo "─────────────────────────────────────────────────────────────────────"
+echo
+
+verdict="$(printf '%s\n' "$review" | grep -oE 'REVIEW_RESULT:[[:space:]]*(PASS|BLOCK)' | tail -n1 || true)"
+
+case "$verdict" in
+  *BLOCK*)
+    echo "pre-push: review found 🔴 blocker(s). Push aborted." >&2
+    echo "         Fix the issues, or bypass with:  SKIP_CODE_REVIEW=1 git push" >&2
+    exit 1
+    ;;
+  *PASS*)
+    echo "pre-push: review passed."
+    exit 0
+    ;;
+  *)
+    echo "pre-push: could not read a REVIEW_RESULT verdict from the review — allowing push." >&2
+    exit 0
+    ;;
+esac
