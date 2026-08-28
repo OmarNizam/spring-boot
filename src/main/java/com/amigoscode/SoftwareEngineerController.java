@@ -18,7 +18,6 @@ public class SoftwareEngineerController {
 
     @GetMapping
     public List<SoftwareEngineer> getEngineers() {
-        List<SoftwareEngineer> softwareEngineers = softwareEngineerService.getAllSoftwareEngineers();
-        return softwareEngineers;
+        return softwareEngineerService.getAllSoftwareEngineers();
     }
 }
