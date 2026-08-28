@@ -10,14 +10,15 @@ import java.util.List;
 @RequestMapping("api/v1/software-engineers")
 public class SoftwareEngineerController {
 
-    private final SoftwareEngineerRepository softwareEngineerRepository;
+    private final SoftwareEngineerService softwareEngineerService;
 
-    public SoftwareEngineerController(SoftwareEngineerRepository softwareEngineerRepository) {
-        this.softwareEngineerRepository = softwareEngineerRepository;
+    public SoftwareEngineerController(SoftwareEngineerService softwareEngineerService) {
+        this.softwareEngineerService =  softwareEngineerService;
     }
 
     @GetMapping
     public List<SoftwareEngineer> getEngineers() {
-        return softwareEngineerRepository.findAll();
+        List<SoftwareEngineer> softwareEngineers = softwareEngineerService.getAllSoftwareEngineers();
+        return softwareEngineers;
     }
 }
