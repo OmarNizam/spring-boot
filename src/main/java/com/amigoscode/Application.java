@@ -17,12 +17,12 @@ public class Application {
         SpringApplication.run(Application.class, args);
     }
 
-    @GetMapping
-    public int  getMessage() {
-//        int[] numbers = {1, 2, 3, 4, 5};
-        int[] numbers = {1, 2, 3};
-
-        return numbers[2];
-    }
+//    @GetMapping
+//    public int  getMessage() {
+////        int[] numbers = {1, 2, 3, 4, 5};
+//        int[] numbers = {1, 2, 3};
+//
+//        return numbers[2];
+//    }
 
 }
