@@ -86,11 +86,16 @@ run_claude() {
   local cmd=("$CLAUDE_BIN" -p --allowedTools "$tools")
   [ -n "$disallow" ] && cmd+=(--disallowedTools "$disallow")
 
-  # Clean up temp files and any in-flight children if the hook is interrupted.
+  # On interrupt: kill any in-flight children, drop temp files, and exit the hook
+  # cleanly (0) so a Ctrl-C during the run allows the push rather than resuming
+  # into a set -e abort on the now-deleted temp files. git itself has the signal
+  # too and will still stop the push if that is what the user wanted.
   local cmd_pid="" killer_pid=""
-  trap 'rm -f "$outfile" "$errfile" "$timeout_flag"
-        [ -n "$cmd_pid" ] && kill -TERM "$cmd_pid" 2>/dev/null
-        [ -n "$killer_pid" ] && kill -TERM "$killer_pid" 2>/dev/null' INT TERM
+  trap '[ -n "$cmd_pid" ] && kill -TERM "$cmd_pid" 2>/dev/null
+        [ -n "$killer_pid" ] && kill -TERM "$killer_pid" 2>/dev/null
+        rm -f "$outfile" "$errfile" "$timeout_flag"
+        echo "pre-push: interrupted — allowing push." >&2
+        exit 0' INT TERM
 
   set +e
   if [ -n "$TIMEOUT_BIN" ]; then
@@ -223,6 +228,12 @@ if is_blank "$diff"; then
 fi
 
 # ─────────────────────────────── 1. tests + coverage ───────────────────────────
+# Tests run before the review by design: the review's value is the human-readable
+# report, the tests' value is a hard pass/fail, and there is no point reviewing a
+# change whose tests are red. Maven/plugins/test code do execute before anything
+# inspects the diff, but they are your own committed code and the prompt heredoc
+# is quoted so diff text never reaches that Bash-enabled session.
+#
 # The test phase runs `./mvnw test` against the WORKING TREE, not the pushed diff
 # (unlike the review phase). So it only runs when the push actually changes Java
 # or the build, and is skipped when the tree is dirty or does not match the
