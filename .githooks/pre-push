@@ -1,35 +1,40 @@
 #!/usr/bin/env bash
 #
-# pre-push: run the Claude Code "code-reviewer" subagent against the commits
-# being pushed. Blocks the push if the review reports a 🔴 blocker.
+# pre-push: two Claude Code checks against the commits being pushed.
+#
+#   1. unit-tester subagent  — runs `./mvnw test` and prints coverage.
+#                              Blocks the push on a genuine test failure.
+#   2. code-reviewer subagent — reviews the pushed diff.
+#                              Blocks the push on a 🔴 blocker.
 #
 # This hook is tracked in .githooks/. Activate it once per clone with:
 #     git config core.hooksPath .githooks
 #
 # Bypass:  git push --no-verify        (skips all hooks)
-#     or:  SKIP_CODE_REVIEW=1 git push (skips just this review)
+#     or:  SKIP_TESTS=1 git push       (skips just the test run)
+#     or:  SKIP_CODE_REVIEW=1 git push (skips just the review)
 #
 # Tunables (env):
 #   CLAUDE_BIN             path to the claude CLI (default: ~/.local/bin/claude or $PATH)
-#   CODE_REVIEW_TIMEOUT    seconds before the review is abandoned (default: 600)
+#   TEST_TIMEOUT          seconds before the test run is abandoned (default: 600)
+#   CODE_REVIEW_TIMEOUT   seconds before the review is abandoned (default: 600)
 #
-# Fails open: any error, timeout, or unreadable verdict allows the push.
+# Fails open: any error, timeout, unreadable verdict, or environment problem
+# (e.g. Postgres not listening on 5332) allows the push. Only an explicit
+# FAIL / BLOCK verdict stops it.
 #
 set -euo pipefail
-
-if [ "${SKIP_CODE_REVIEW:-0}" = "1" ]; then
-  echo "pre-push: SKIP_CODE_REVIEW=1 — skipping code review."
-  exit 0
-fi
 
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
 if ! [ -x "$CLAUDE_BIN" ]; then
   CLAUDE_BIN="$(command -v claude || true)"
 fi
 if [ -z "$CLAUDE_BIN" ] || ! [ -x "$CLAUDE_BIN" ]; then
-  echo "pre-push: 'claude' CLI not found — skipping code review." >&2
+  echo "pre-push: 'claude' CLI not found — skipping test run and code review." >&2
   exit 0
 fi
+
+TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
@@ -39,15 +44,71 @@ empty_tree="$(git hash-object -t tree /dev/null)"
 # True when $1 is empty or all-whitespace. (Avoid ${v//[[:space:]]/} — it is
 # pathologically slow on multi-KB strings in bash 3.2, which ships on macOS.)
 is_blank() { case "$1" in *[![:space:]]*) return 1 ;; *) return 0 ;; esac; }
+is_zero()  { case "$1" in *[!0]*) return 1 ;; *) return 0 ;; esac; }
 
-REVIEW_TIMEOUT="${CODE_REVIEW_TIMEOUT:-600}"
-case "$REVIEW_TIMEOUT" in
-  ''|*[!0-9]*|0|0[0-9]*)
-    echo "pre-push: invalid CODE_REVIEW_TIMEOUT='$REVIEW_TIMEOUT' — using 600." >&2
-    REVIEW_TIMEOUT=600 ;;
-esac
+validate_timeout() {  # <value> <name> -> echoes a valid integer, defaulting to 600
+  case "$1" in
+    ''|*[!0-9]*|0|0[0-9]*)
+      echo "pre-push: invalid $2='$1' — using 600." >&2
+      echo 600 ;;
+    *) echo "$1" ;;
+  esac
+}
+TEST_TIMEOUT="$(validate_timeout "${TEST_TIMEOUT:-600}" TEST_TIMEOUT)"
+REVIEW_TIMEOUT="$(validate_timeout "${CODE_REVIEW_TIMEOUT:-600}" CODE_REVIEW_TIMEOUT)"
 
-is_zero() { case "$1" in *[!0]*) return 1 ;; *) return 0 ;; esac; }
+# Run `claude -p` on stdin with a wall-clock cap.
+#   args:    <prompt> <timeout_s> <allowed_tools>
+#   returns: CLAUDE_OUT (stdout), CLAUDE_ERR (stderr), CLAUDE_STATUS (exit code),
+#            CLAUDE_TIMED_OUT (non-empty if the run was killed for taking too long)
+run_claude() {
+  local prompt="$1" timeout_s="$2" tools="$3"
+  local outfile errfile timeout_flag
+  outfile="$(mktemp)"; errfile="$(mktemp)"; timeout_flag="$(mktemp)"; rm -f "$timeout_flag"
+
+  set +e
+  if [ -n "$TIMEOUT_BIN" ]; then
+    printf '%s' "$prompt" | "$TIMEOUT_BIN" "$timeout_s" \
+      "$CLAUDE_BIN" -p --allowedTools "$tools" >"$outfile" 2>"$errfile"
+    CLAUDE_STATUS=$?
+    [ "$CLAUDE_STATUS" -eq 124 ] && : >"$timeout_flag"
+  else
+    # No timeout(1) available (e.g. stock macOS): portable watchdog.
+    printf '%s' "$prompt" | "$CLAUDE_BIN" -p --allowedTools "$tools" \
+      >"$outfile" 2>"$errfile" &
+    local cmd_pid=$!
+    ( sleep "$timeout_s"; : >"$timeout_flag"; kill -TERM "$cmd_pid" 2>/dev/null
+      sleep 5; kill -KILL "$cmd_pid" 2>/dev/null ) &
+    local killer_pid=$!
+    # Silence job-control chatter ("Terminated: 15") during the waits; the
+    # command's own stderr is already captured in "$errfile".
+    exec 4>&2 2>/dev/null
+    wait "$cmd_pid"; CLAUDE_STATUS=$?
+    kill -TERM "$killer_pid" 2>/dev/null
+    wait "$killer_pid" 2>/dev/null
+    exec 2>&4 4>&-
+  fi
+  set -e
+
+  CLAUDE_OUT="$(cat "$outfile")"
+  CLAUDE_ERR="$(cat "$errfile")"
+  CLAUDE_TIMED_OUT=""
+  [ -f "$timeout_flag" ] && CLAUDE_TIMED_OUT=1
+  rm -f "$outfile" "$errfile" "$timeout_flag"
+}
+
+# Last non-blank line if it carries the marker, else the last anchored match
+# anywhere — so a marker string quoted inside reviewed content can't be mistaken
+# for the verdict.  args: <text> <marker> <alternation e.g. PASS|FAIL>
+read_verdict() {
+  local text="$1" marker="$2" alt="$3" last
+  last="$(printf '%s\n' "$text" | awk 'NF{l=$0} END{print l}')"
+  case "$last" in
+    *"$marker":*) printf '%s\n' "$last" ;;
+    *) printf '%s\n' "$text" \
+         | grep -E "^[[:space:]]*${marker}:[[:space:]]*(${alt})[[:space:]]*$" | tail -n1 || true ;;
+  esac
+}
 
 # Resolve a review range for a ref being pushed, as "<base> <tip>" (two-arg
 # git-diff form, so a root commit can diff against the empty tree).
@@ -119,8 +180,71 @@ if is_blank "$diff"; then
   if [ -n "$diff_failed" ]; then
     echo "pre-push: no reviewable diff (diff errors above) — allowing push." >&2
   else
-    echo "pre-push: no code changes to review."
+    echo "pre-push: no code changes to test or review."
   fi
+  exit 0
+fi
+
+# ─────────────────────────────── 1. tests + coverage ───────────────────────────
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+  echo "pre-push: SKIP_TESTS=1 — skipping the test run."
+else
+  echo "pre-push: running the test suite + coverage with the unit-tester subagent…"
+
+  test_prompt="$(cat <<'EOF'
+Use the unit-tester subagent to run the EXISTING test suite for this repo and
+report coverage. Do NOT write or modify any test or source file — this is a
+run-and-report task only.
+
+Ask the subagent to:
+  1. Run `./mvnw test` from the repo root.
+  2. Report tests run / failures / errors.
+  3. Read target/site/jacoco/jacoco.csv and give a short per-class table of
+     instruction (line) % and branch %, plus the overall total.
+  4. Note which uncovered code is meaningful behaviour vs noise (generated code,
+     framework bootstrap). Do NOT fail the run over a coverage number.
+
+Relay the report from the subagent verbatim, then make the LAST line of your
+response exactly one of these, on its own line with nothing after it:
+  TEST_RESULT: PASS   — build succeeded and every test is green
+  TEST_RESULT: FAIL   — a genuine test failure or compilation error
+  TEST_RESULT: SKIP   — the suite could not run for an environmental reason
+                        (e.g. Postgres not listening on host port 5332, or the
+                        graphql-client source dir is missing)
+EOF
+)"
+
+  run_claude "$test_prompt" "$TEST_TIMEOUT" "Task Bash Read Grep Glob"
+
+  if [ -n "$CLAUDE_TIMED_OUT" ]; then
+    echo "pre-push: test run timed out after ${TEST_TIMEOUT}s — allowing push." >&2
+  elif [ "$CLAUDE_STATUS" -ne 0 ]; then
+    echo "pre-push: test run did not complete (claude exit $CLAUDE_STATUS) — allowing push." >&2
+    [ -n "$CLAUDE_ERR" ] && printf '%s\n' "$CLAUDE_ERR" | sed 's/^/  claude: /' >&2
+  else
+    echo
+    echo "──────────────────────────── tests + coverage ───────────────────────"
+    printf '%s\n' "$CLAUDE_OUT"
+    echo "─────────────────────────────────────────────────────────────────────"
+    echo
+    case "$(read_verdict "$CLAUDE_OUT" TEST_RESULT 'PASS|FAIL|SKIP')" in
+      *FAIL*)
+        echo "pre-push: test suite failed. Push aborted." >&2
+        echo "         Fix the tests, or bypass with:  SKIP_TESTS=1 git push" >&2
+        exit 1 ;;
+      *PASS*)
+        echo "pre-push: tests passed." ;;
+      *SKIP*)
+        echo "pre-push: tests could not run (environment) — allowing push." >&2 ;;
+      *)
+        echo "pre-push: could not read a TEST_RESULT verdict — allowing push." >&2 ;;
+    esac
+  fi
+fi
+
+# ──────────────────────────────── 2. code review ──────────────────────────────
+if [ "${SKIP_CODE_REVIEW:-0}" = "1" ]; then
+  echo "pre-push: SKIP_CODE_REVIEW=1 — skipping code review."
   exit 0
 fi
 
@@ -154,47 +278,16 @@ $diff
 EOF
 )"
 
-outfile="$(mktemp)"
-errfile="$(mktemp)"
-timeout_flag="$(mktemp)"; rm -f "$timeout_flag"
-cleanup() { rm -f "$outfile" "$errfile" "$timeout_flag"; }
-trap cleanup EXIT
+run_claude "$prompt" "$REVIEW_TIMEOUT" "Task Read Grep Glob"
+review="$CLAUDE_OUT"
 
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
-
-set +e
-if [ -n "$TIMEOUT_BIN" ]; then
-  printf '%s' "$prompt" | "$TIMEOUT_BIN" "$REVIEW_TIMEOUT" \
-    "$CLAUDE_BIN" -p --allowedTools "Task Read Grep Glob" >"$outfile" 2>"$errfile"
-  status=$?
-  [ "$status" -eq 124 ] && : >"$timeout_flag"
-else
-  # No timeout(1) available (e.g. stock macOS): portable watchdog.
-  printf '%s' "$prompt" | "$CLAUDE_BIN" -p --allowedTools "Task Read Grep Glob" \
-    >"$outfile" 2>"$errfile" &
-  cmd_pid=$!
-  ( sleep "$REVIEW_TIMEOUT"; : >"$timeout_flag"; kill -TERM "$cmd_pid" 2>/dev/null
-    sleep 5; kill -KILL "$cmd_pid" 2>/dev/null ) &
-  killer_pid=$!
-  # Silence job-control chatter ("Terminated: 15") during the waits; the command's
-  # own stderr is already captured in "$errfile".
-  exec 4>&2 2>/dev/null
-  wait "$cmd_pid"; status=$?
-  kill -TERM "$killer_pid" 2>/dev/null
-  wait "$killer_pid" 2>/dev/null
-  exec 2>&4 4>&-
-fi
-set -e
-
-review="$(cat "$outfile")"
-
-if [ -f "$timeout_flag" ]; then
+if [ -n "$CLAUDE_TIMED_OUT" ]; then
   echo "pre-push: code review timed out after ${REVIEW_TIMEOUT}s — allowing push." >&2
   exit 0
 fi
-if [ "$status" -ne 0 ]; then
-  echo "pre-push: code review did not complete (claude exit $status) — allowing push." >&2
-  [ -s "$errfile" ] && sed 's/^/  claude: /' "$errfile" >&2
+if [ "$CLAUDE_STATUS" -ne 0 ]; then
+  echo "pre-push: code review did not complete (claude exit $CLAUDE_STATUS) — allowing push." >&2
+  [ -n "$CLAUDE_ERR" ] && printf '%s\n' "$CLAUDE_ERR" | sed 's/^/  claude: /' >&2
   exit 0
 fi
 
@@ -204,16 +297,7 @@ printf '%s\n' "$review"
 echo "─────────────────────────────────────────────────────────────────────"
 echo
 
-# The verdict is the agent's final line. Prefer the last non-blank line; only if
-# that isn't a verdict line fall back to the last anchored match anywhere, so a
-# REVIEW_RESULT string quoted inside the reviewed diff can't be mistaken for it.
-verdict="$(printf '%s\n' "$review" | awk 'NF{last=$0} END{print last}')"
-case "$verdict" in
-  *REVIEW_RESULT:*PASS*|*REVIEW_RESULT:*BLOCK*) ;;
-  *) verdict="$(printf '%s\n' "$review" | grep -E '^[[:space:]]*REVIEW_RESULT:[[:space:]]*(PASS|BLOCK)[[:space:]]*$' | tail -n1 || true)" ;;
-esac
-
-case "$verdict" in
+case "$(read_verdict "$review" REVIEW_RESULT 'PASS|BLOCK')" in
   *BLOCK*)
     echo "pre-push: review found 🔴 blocker(s). Push aborted." >&2
     echo "         Fix the issues, or bypass with:  SKIP_CODE_REVIEW=1 git push" >&2
