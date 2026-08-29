@@ -92,8 +92,7 @@ Base URL: `http://localhost:8080`
 | `GET` | `/api/v1/software-engineers` | All software engineers | `200` — JSON array |
 
 `requests.http` in the project root contains this call, runnable directly from
-IntelliJ's HTTP client. (It also lists `GET /`, a leftover demo endpoint on
-`Application` that is currently commented out and returns `404`.)
+IntelliJ's HTTP client.
 
 ### `SoftwareEngineer`
 
