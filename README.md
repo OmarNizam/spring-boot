@@ -111,7 +111,7 @@ IntelliJ's HTTP client. (It also lists `GET /`, a leftover demo endpoint on
 | Database | `postgres-spring-boot` |
 | User / password | `amigoscode` / `password` |
 | Container | `postgres-spring-boot` |
-| Volume | `postgres_data` (data survives `docker compose down`) |
+| Volume | `postgres_data` (the volume survives `docker compose down`, but `ddl-auto=create-drop` recreates the tables empty on every startup — see below) |
 
 > The credentials above are local development values, committed intentionally so the
 > project runs after a clone. Do not reuse this setup as-is for anything deployed.
@@ -147,7 +147,7 @@ All settings live in `src/main/resources/application.properties`.
 | `spring.datasource.username` / `.password` | `amigoscode` / `password` | Explicit credentials for the jar/test path |
 | `spring.datasource.driver-class-name` | `org.postgresql.Driver` | Declared explicitly rather than inferred from the URL |
 | `spring.jpa.hibernate.ddl-auto` | `create-drop` | Hibernate drops and recreates the schema each run |
-| `spring.jpa.show-sql` / `hibernate.format_sql` | `true` / `true` | Logs generated SQL, pretty-printed |
+| `spring.jpa.show-sql` / `spring.jpa.properties.hibernate.format_sql` | `true` / `true` | Logs generated SQL, pretty-printed |
 | `spring.jpa.properties.hibernate.dialect` | `org.hibernate.dialect.PostgreSQLDialect` | Pinned explicitly |
 | `spring.docker.compose.lifecycle-management` | `start-only` | Leaves Postgres running after app shutdown |
 

@@ -127,8 +127,8 @@ These are inherited from the project template or the course exercises and are no
 
 - **`Application` is annotated `@RestController`.** It used to map `GET /` to a method
   returning `numbers[2]` — a leftover array-indexing exercise. The method is now commented
-  out, so the annotation and its `web.bind.annotation` imports sit on the entry-point class
-  doing nothing. Both should go.
+  out, leaving a `@RestController` with no mappings plus unused imports (`GetMapping`,
+  `java.sql.Array`, `java.util.Arrays`). The annotation and the dead imports should go.
 - **`graphqlcodegen-maven-plugin`** is configured against `src/main/resources/graphql-client`,
   which does not exist. The build passes because the plugin finds no schemas. Dead config;
   safe to delete along with the `build-helper-maven-plugin` block that adds its output
