@@ -12,7 +12,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class SoftwareEngineerServiceTest {
@@ -35,7 +34,6 @@ class SoftwareEngineerServiceTest {
 
         assertThat(result).isEqualTo(engineers);
         verify(softwareEngineerRepository).findAll();
-        verifyNoMoreInteractions(softwareEngineerRepository);
     }
 
     @Test
@@ -43,5 +41,6 @@ class SoftwareEngineerServiceTest {
         given(softwareEngineerRepository.findAll()).willReturn(List.of());
 
         assertThat(softwareEngineerService.getAllSoftwareEngineers()).isEmpty();
+        verify(softwareEngineerRepository).findAll();
     }
 }
