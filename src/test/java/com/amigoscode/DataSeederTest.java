@@ -29,6 +29,12 @@ class DataSeederTest {
     @Captor
     private ArgumentCaptor<List<SoftwareEngineer>> engineersCaptor;
 
+    /**
+     * Pins the current seed shape: one comma-joined string per engineer, even though
+     * {@code techStack} is an {@code @ElementCollection} that could hold each technology
+     * as its own element. Documents what is there today — update this when the seed data
+     * is normalised.
+     */
     @Test
     void seedsTwoEngineersWhenTableIsEmpty() {
         given(softwareEngineerRepository.count()).willReturn(0L);

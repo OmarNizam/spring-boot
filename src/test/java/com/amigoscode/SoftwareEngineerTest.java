@@ -43,7 +43,7 @@ class SoftwareEngineerTest {
 
     /**
      * Documents the current IDE-generated {@code equals}: two engineers are equal only when
-     * <em>every</em> field matches, id included. ARCHITECTURE.md flags this as fragile for a
+     * <em>every</em> field matches, id included. docs/ARCHITECTURE.md flags this as fragile for a
      * JPA entity (see "Known rough edges"); this test pins the behaviour as it stands rather
      * than endorsing it.
      */
@@ -65,7 +65,7 @@ class SoftwareEngineerTest {
      * Only the required part of the contract — equal objects share a hash code. We do not
      * assert what {@code hashCode} is built from: because it currently includes the generated
      * id, the value changes when a transient instance is persisted, which is exactly the
-     * fragility ARCHITECTURE.md warns about.
+     * fragility docs/ARCHITECTURE.md warns about.
      */
     @Test
     void equalEngineersShareAHashCode() {
