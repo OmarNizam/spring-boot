@@ -177,6 +177,7 @@ docs/ARCHITECTURE.md                  # Design decisions and how the pieces fit
 |---|---|---|
 | `ApplicationTests.contextLoads` | `@SpringBootTest` — boots the full context | Yes |
 | `SoftwareEngineerControllerTest` | `@WebMvcTest` slice — MockMvc against the controller with the service mocked | No |
+| `SoftwareEngineerServiceTest` | Plain Mockito unit test — service with the repository mocked | No |
 
 Spring skips Docker Compose startup in tests (`spring.docker.compose.skip.in-tests`
 defaults to `true`), so `ApplicationTests` needs **Postgres already running** or it fails
