@@ -1,6 +1,6 @@
 ---
 name: unit-tester
-description: Writes and maintains JUnit 5 tests for this Spring Boot codebase — Mockito unit tests, @WebMvcTest controller slices, and @SpringBootTest JPA tests. Use when adding coverage for new or changed code, or when asked to audit what is tested.
+description: Writes and maintains JUnit 5 tests for this Spring Boot codebase — Mockito unit tests, @WebMvcTest controller slices, and @SpringBootTest JPA tests. Use when adding coverage for new or changed code, when asked to audit what is tested, or when asked to generate or read the JaCoCo coverage report.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
 color: green
@@ -44,6 +44,23 @@ project and the build will fail.
    plugin fails the build before any test runs. It is an empty tracked directory
    (`.gitkeep`); if a fresh clone is missing it, restore it rather than editing the pom.
 
+## Coverage report (JaCoCo)
+
+The `jacoco-maven-plugin` is wired into the build. `./mvnw test` writes a report to
+`target/site/jacoco/` — `index.html` for browsing, `jacoco.csv` for a quick
+per-class scan, `jacoco.xml` for tooling. Generated code (`com.amigoscode.codegen`)
+is excluded.
+
+Use coverage as a **diagnostic, not a target**: read the report to find methods and
+branches that no test exercises, then judge whether each uncovered path is a
+meaningful behaviour worth pinning. A low number on a class full of real logic is a
+signal; a low number on generated mappings or trivial plumbing is not. Never write a
+test whose only effect is to move the number — that rule below still stands.
+
+When asked for the coverage report specifically: run `./mvnw test` (Postgres must be
+up — see above), then summarise `target/site/jacoco/jacoco.csv` by class (line and
+branch %) and call out which gaps are real and which are noise.
+
 ## House conventions (already in the code — follow them)
 
 - **Unit tests:** `@ExtendWith(MockitoExtension.class)`, `@Mock` + `@InjectMocks`,
@@ -74,4 +91,6 @@ stop — that is a valid result.
 
 - Files added or changed, and the behaviour each new test pins.
 - `./mvnw test` result — with a note if it depended on the running Postgres container.
+- Coverage before/after from `target/site/jacoco/` when tests were added or a report
+  was requested — per-class line/branch %, framed as a diagnostic.
 - Any gap you deliberately left untested, and why.
