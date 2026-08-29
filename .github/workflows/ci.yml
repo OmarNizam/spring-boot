@@ -8,14 +8,17 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on a PR branch; let every push to main run to a
+# conclusive status (CLAUDE.md calls CI the authoritative gate on the pushed ref).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
     name: Build & test (JDK 21, Postgres)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       # Mirrors compose.yaml's `db` service. Mapped to host port 5332 so the
@@ -62,4 +65,6 @@ jobs:
         with:
           name: jacoco-report
           path: target/site/jacoco/
-          if-no-files-found: warn
+          # A build that fails before the JaCoCo report goal produces no report;
+          # that is not itself an error worth a log warning.
+          if-no-files-found: ignore
