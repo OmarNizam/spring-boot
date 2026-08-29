@@ -32,8 +32,9 @@ cd spring-boot
 ```
 
 That's it. Spring Boot's Docker Compose support reads `compose.yaml`, starts the
-Postgres container automatically, and points the datasource at it. Hibernate recreates the
-schema on every run (`ddl-auto=create-drop`) and `DataSeeder` inserts two sample engineers.
+Postgres container automatically, and points the datasource at it. Hibernate reconciles the
+schema with the entity classes on startup (`ddl-auto=update`) and, on a fresh database,
+`DataSeeder` inserts two sample engineers.
 
 Then:
 
@@ -110,7 +111,7 @@ IntelliJ's HTTP client.
 | Database | `postgres-spring-boot` |
 | User / password | `amigoscode` / `password` |
 | Container | `postgres-spring-boot` |
-| Volume | `postgres_data` (the volume survives `docker compose down`, but `ddl-auto=create-drop` recreates the tables empty on every startup — see below) |
+| Volume | `postgres_data` (survives `docker compose down`; with `ddl-auto=update` the rows persist across app restarts too — see below) |
 
 > The credentials above are local development values, committed intentionally so the
 > project runs after a clone. Do not reuse this setup as-is for anything deployed.
@@ -125,12 +126,14 @@ select * from software_engineer;
 select * from software_engineer_tech_stack;
 ```
 
-Schema is managed by Hibernate (`spring.jpa.hibernate.ddl-auto=create-drop`) — tables are
-dropped on shutdown and recreated from the entity classes on every startup. There are no
-migration files, and no data survives a restart regardless of the volume.
+Schema is managed by Hibernate (`spring.jpa.hibernate.ddl-auto=update`) — on startup it
+adds any missing tables and columns from the entity classes and leaves existing data in
+place. There are no migration files, but rows now survive an app restart because the
+`postgres_data` volume keeps them.
 
-The database therefore starts empty on every run and `DataSeeder` re-seeds it. To wipe
-the persisted volume as well (e.g. after changing the Postgres image):
+`DataSeeder` therefore seeds only a fresh database; on later runs its `count() > 0` guard
+skips it. To wipe the persisted volume (e.g. after changing the Postgres image or to force
+a re-seed):
 
 ```bash
 docker compose down -v && ./mvnw spring-boot:run
@@ -145,7 +148,7 @@ All settings live in `src/main/resources/application.properties`.
 | `spring.datasource.url` | `jdbc:postgresql://localhost:5332/postgres-spring-boot` | Used when compose support is absent (jar runs, tests) |
 | `spring.datasource.username` / `.password` | `amigoscode` / `password` | Explicit credentials for the jar/test path |
 | `spring.datasource.driver-class-name` | `org.postgresql.Driver` | Declared explicitly rather than inferred from the URL |
-| `spring.jpa.hibernate.ddl-auto` | `create-drop` | Hibernate drops and recreates the schema each run |
+| `spring.jpa.hibernate.ddl-auto` | `update` | Hibernate adds missing tables/columns on startup and keeps existing data |
 | `spring.jpa.show-sql` / `spring.jpa.properties.hibernate.format_sql` | `true` / `true` | Logs generated SQL, pretty-printed |
 | `spring.jpa.properties.hibernate.dialect` | `org.hibernate.dialect.PostgreSQLDialect` | Pinned explicitly |
 | `spring.docker.compose.lifecycle-management` | `start-only` | Leaves Postgres running after app shutdown |
@@ -198,13 +201,13 @@ docker compose up -d db && ./mvnw test
 **Port 5332 or 8080 already in use** — find the holder with `lsof -nP -iTCP:8080 -sTCP:LISTEN`,
 or run the app on another port: `./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081`.
 
-**The endpoint returns `[]`** — `DataSeeder` inserts only when the row count is zero.
-With `create-drop` the table is empty at every startup, so this points to a seeding
-failure — check the startup log.
+**The endpoint returns `[]`** — `DataSeeder` inserts only when the row count is zero. On a
+fresh database that means a seeding failure (check the startup log); on an existing volume
+the table was emptied — the seeder will re-fill it on the next start.
 
-**Duplicate rows after restarts** — can't happen with `create-drop`: the schema is
-dropped on shutdown. The `repository.count() > 0` guard in `DataSeeder` also protects
-against it if `ddl-auto` is later changed to `update`.
+**Duplicate rows after restarts** — the `repository.count() > 0` guard in `DataSeeder`
+prevents this: with `ddl-auto=update` the seeded rows persist in the `postgres_data`
+volume, so the guard short-circuits the seeder on every start after the first.
 
 **IntelliJ: `Could not find or load main class com.amigoscode.Application`** — the Maven
 module isn't registered. Maven tool window → *Reload All Maven Projects*, then delete and

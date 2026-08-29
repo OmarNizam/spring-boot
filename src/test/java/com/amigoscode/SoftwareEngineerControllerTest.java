@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.BDDMockito.given;
@@ -50,5 +51,22 @@ class SoftwareEngineerControllerTest {
         mockMvc.perform(get("/api/v1/software-engineers"))
                 .andExpect(status().isOk())
                 .andExpect(content().json("[]"));
+    }
+
+    /**
+     * Pins that a service failure is <em>not</em> translated: there is no
+     * {@code @RestControllerAdvice} (docs/ARCHITECTURE.md lists one as future work), so the
+     * exception propagates straight out of the dispatcher. This test documents the gap and
+     * will fail loudly — by design — the moment error handling is added, at which point it
+     * should be rewritten to assert the chosen HTTP status.
+     */
+    @Test
+    void getEngineers_propagatesServiceExceptionUnhandled() {
+        given(softwareEngineerService.getAllSoftwareEngineers())
+                .willThrow(new RuntimeException("repository is down"));
+
+        assertThatThrownBy(() -> mockMvc.perform(get("/api/v1/software-engineers")))
+                .hasRootCauseInstanceOf(RuntimeException.class)
+                .hasRootCauseMessage("repository is down");
     }
 }

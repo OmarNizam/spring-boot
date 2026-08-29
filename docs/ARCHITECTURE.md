@@ -99,27 +99,31 @@ published-port mapping applies only on the host, so inside the network Postgres 
 on its default 5432. That is why the `app` service carries its own `SPRING_DATASOURCE_URL`
 pointing at `db:5432` rather than reusing the host-facing `5332`.
 
-### Schema by `ddl-auto=create-drop`
+### Schema by `ddl-auto=update`
 
-Hibernate drops the schema on shutdown and regenerates it from the entity classes on
-every startup. Chosen for iteration speed on a learning project: entity changes take
-effect on the next run with no manual DDL, and there is never a stale column left behind.
-The trade-off is that **no data survives a restart** — the persisted volume still holds
-the files, but Hibernate drops the tables anyway.
+Hibernate reconciles the schema with the entity classes on startup — adding any missing
+tables and columns — and leaves the data in place. Chosen so the persistent
+`postgres_data` volume in `compose.yaml` actually means something: rows survive an
+app restart, and the `DataSeeder` guard below has real work to do.
 
-Its limits are the same as `update` plus data loss: no reviewable schema artifact, and
-nothing you would point at a shared or production database. Migrating to Flyway later
+It replaced `create-drop`, which dropped the whole schema on every JVM shutdown (and
+could drop tables mid-run under a devtools restart, leaving the app up with no tables) —
+fast to iterate on, but it wiped the volume on every run and made the seeder guard inert.
+`update` keeps the iteration speed for additive entity changes without the data loss.
+
+The trade-off is `update`'s usual one: it only adds, never alters or drops, so a renamed
+or removed field leaves a stale column behind, and there is no reviewable schema artifact.
+Nothing you would point at a shared or production database. Migrating to Flyway later
 means adding `spring-boot-starter-flyway`, capturing the current schema as `V1__init.sql`,
 and setting `ddl-auto=validate`.
 
 ### Seeding is guarded, not idempotent by luck
 
-`DataSeeder` checks `repository.count() > 0` and returns early. Under `create-drop` the
-table is always empty at startup, so the seeder always runs and the guard is effectively
-inert — but it is what keeps the seeder safe if `ddl-auto` is ever changed back to
-`update`, where the persisted volume would otherwise cause duplicate engineers on every
-launch. The guard is on row count rather than specific IDs, so an intentionally emptied
-table re-seeds on the next run.
+`DataSeeder` checks `repository.count() > 0` and returns early. Under `ddl-auto=update`
+the `postgres_data` volume carries rows across restarts, so on the second launch the
+table is non-empty and the guard is what stops a duplicate set of engineers being
+inserted every time. The guard is on row count rather than specific IDs, so an
+intentionally emptied table re-seeds on the next run.
 
 ## Known rough edges
 
