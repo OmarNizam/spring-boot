@@ -173,9 +173,14 @@ docs/ARCHITECTURE.md                  # Design decisions and how the pieces fit
 ./mvnw test
 ```
 
-`ApplicationTests.contextLoads` boots the full application context. Spring skips Docker
-Compose startup in tests (`spring.docker.compose.skip.in-tests` defaults to `true`), so
-**Postgres must already be running** or the test fails to obtain a datasource:
+| Test | Type | Needs Postgres? |
+|---|---|---|
+| `ApplicationTests.contextLoads` | `@SpringBootTest` — boots the full context | Yes |
+| `SoftwareEngineerControllerTest` | `@WebMvcTest` slice — MockMvc against the controller with the service mocked | No |
+
+Spring skips Docker Compose startup in tests (`spring.docker.compose.skip.in-tests`
+defaults to `true`), so `ApplicationTests` needs **Postgres already running** or it fails
+to obtain a datasource:
 
 ```bash
 docker compose up -d db && ./mvnw test
