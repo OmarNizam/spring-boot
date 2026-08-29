@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 #
-# pre-push: two Claude Code checks against the commits being pushed.
+# pre-push: two Claude Code checks on a push.
 #
 #   1. unit-tester subagent  — runs `./mvnw test` and prints coverage.
 #                              Blocks the push on a genuine test failure.
 #   2. code-reviewer subagent — reviews the pushed diff.
 #                              Blocks the push on a 🔴 blocker.
+#
+# Phase 2 reads the pushed diff. Phase 1 runs Maven against the WORKING TREE, so
+# it only runs when the push touches src/ or pom.xml AND the tree is clean AND
+# HEAD is one of the pushed tips; otherwise it is skipped and the push proceeds.
 #
 # This hook is tracked in .githooks/. Activate it once per clone with:
 #     git config core.hooksPath .githooks
@@ -21,10 +25,10 @@
 #   TEST_TIMEOUT         seconds before the test run is abandoned (default: 600)
 #   CODE_REVIEW_TIMEOUT  seconds before the review is abandoned (default: 600)
 #
-# The test phase pre-approves the Bash tool for the run (claude -p --allowedTools
-# "Task Bash Read Grep Glob") so the subagent can invoke `./mvnw test`. That is a
-# deliberate trade-off, consistent with the review phase already trusting `claude
-# -p`. A whole-suite run can approach TEST_TIMEOUT on a cold cache.
+# The test phase pre-approves Bash (so the subagent can invoke `./mvnw test`) and
+# denies Write/Edit (so a run-and-report task cannot mutate the tree). A cold
+# whole-suite run can approach TEST_TIMEOUT; worst-case push latency is
+# TEST_TIMEOUT + CODE_REVIEW_TIMEOUT.
 #
 # Fails open: any error, timeout, unreadable verdict, or environment problem
 # (e.g. Postgres not listening on 5332) allows the push. Only an explicit
@@ -75,27 +79,35 @@ REVIEW_TIMEOUT="$(validate_timeout "${CODE_REVIEW_TIMEOUT:-600}" CODE_REVIEW_TIM
 #   returns: CLAUDE_OUT (stdout), CLAUDE_ERR (stderr), CLAUDE_STATUS (exit code),
 #            CLAUDE_TIMED_OUT (non-empty if the run was killed for taking too long)
 run_claude() {
-  local prompt="$1" timeout_s="$2" tools="$3"
+  local prompt="$1" timeout_s="$2" tools="$3" disallow="${4:-}"
   local outfile errfile timeout_flag
   outfile="$(mktemp)"; errfile="$(mktemp)"; timeout_flag="$(mktemp)"; rm -f "$timeout_flag"
+
+  local cmd=("$CLAUDE_BIN" -p --allowedTools "$tools")
+  [ -n "$disallow" ] && cmd+=(--disallowedTools "$disallow")
+
+  # Clean up temp files and any in-flight children if the hook is interrupted.
+  local cmd_pid="" killer_pid=""
+  trap 'rm -f "$outfile" "$errfile" "$timeout_flag"
+        [ -n "$cmd_pid" ] && kill -TERM "$cmd_pid" 2>/dev/null
+        [ -n "$killer_pid" ] && kill -TERM "$killer_pid" 2>/dev/null' INT TERM
 
   set +e
   if [ -n "$TIMEOUT_BIN" ]; then
     # -k 5: SIGKILL 5s after SIGTERM if claude ignores the term (matches the
     # portable watchdog below). Exit 124 is timeout(1)'s "killed on timeout"
     # code; claude itself never exits 124, so treating it as a timeout is safe.
-    printf '%s' "$prompt" | "$TIMEOUT_BIN" -k 5 "$timeout_s" \
-      "$CLAUDE_BIN" -p --allowedTools "$tools" >"$outfile" 2>"$errfile"
+    printf '%s' "$prompt" | "$TIMEOUT_BIN" -k 5 "$timeout_s" "${cmd[@]}" \
+      >"$outfile" 2>"$errfile"
     CLAUDE_STATUS=$?
     { [ "$CLAUDE_STATUS" -eq 124 ] || [ "$CLAUDE_STATUS" -eq 137 ]; } && : >"$timeout_flag"
   else
     # No timeout(1) available (e.g. stock macOS): portable watchdog.
-    printf '%s' "$prompt" | "$CLAUDE_BIN" -p --allowedTools "$tools" \
-      >"$outfile" 2>"$errfile" &
-    local cmd_pid=$!
+    printf '%s' "$prompt" | "${cmd[@]}" >"$outfile" 2>"$errfile" &
+    cmd_pid=$!
     ( sleep "$timeout_s"; : >"$timeout_flag"; kill -TERM "$cmd_pid" 2>/dev/null
       sleep 5; kill -KILL "$cmd_pid" 2>/dev/null ) &
-    local killer_pid=$!
+    killer_pid=$!
     # Silence job-control chatter ("Terminated: 15") during the waits; the
     # command's own stderr is already captured in "$errfile".
     exec 4>&2 2>/dev/null
@@ -106,6 +118,7 @@ run_claude() {
   fi
   set -e
 
+  trap - INT TERM
   CLAUDE_OUT="$(cat "$outfile")"
   CLAUDE_ERR="$(cat "$errfile")"
   CLAUDE_TIMED_OUT=""
@@ -172,6 +185,7 @@ diff=""
 stat=""
 labels=""
 diff_failed=""
+changed=""
 while read -r base tip; do
   [ -z "${base:-}" ] && continue
   # `git diff` (no --exit-code) returns 0 whether or not there are changes;
@@ -183,6 +197,8 @@ while read -r base tip; do
     continue
   fi
   is_blank "$d" && continue
+  changed="$changed
+$(git diff --name-only "$base" "$tip" 2>/dev/null || true)"
   s="$(git diff --stat "$base" "$tip" 2>/dev/null || true)"
   short="$(git rev-parse --short "$base" 2>/dev/null || echo "${base:0:12}")..$(git rev-parse --short "$tip" 2>/dev/null || echo "${tip:0:12}")"
   labels="$labels $short"
@@ -207,8 +223,31 @@ if is_blank "$diff"; then
 fi
 
 # ─────────────────────────────── 1. tests + coverage ───────────────────────────
+# The test phase runs `./mvnw test` against the WORKING TREE, not the pushed diff
+# (unlike the review phase). So it only runs when the push actually changes Java
+# or the build, and is skipped when the tree is dirty or does not match the
+# pushed tip — otherwise a clean push could be judged on unrelated local state.
+touches_code=""
+if printf '%s\n' "$changed" | grep -qE '^(src/|pom\.xml$)'; then touches_code=1; fi
+
+tree_dirty=""
+[ -n "$(git status --porcelain 2>/dev/null)" ] && tree_dirty=1
+head_is_pushed=""
+head_short="$(git rev-parse --short HEAD 2>/dev/null || true)"
+if [ -n "$head_short" ]; then
+  case "$labels" in *"..$head_short"*) head_is_pushed=1 ;; esac
+fi
+
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
   echo "pre-push: SKIP_TESTS=1 — skipping the test run."
+elif [ -z "$touches_code" ]; then
+  echo "pre-push: no changes under src/ or pom.xml — skipping the test run."
+elif [ -n "$tree_dirty" ]; then
+  echo "pre-push: working tree has uncommitted changes — 'mvnw test' would not" >&2
+  echo "         reflect the pushed commits. Skipping tests (push allowed)." >&2
+elif [ -z "$head_is_pushed" ]; then
+  echo "pre-push: HEAD is not among the pushed refs — 'mvnw test' would test the" >&2
+  echo "         wrong commit. Skipping tests (push allowed)." >&2
 else
   echo "pre-push: running the test suite + coverage with the unit-tester subagent…"
 
@@ -235,7 +274,10 @@ response exactly one of these, on its own line with nothing after it:
 EOF
 )"
 
-  run_claude "$test_prompt" "$TEST_TIMEOUT" "Task Bash Read Grep Glob"
+  # Bash is pre-approved so the subagent can run ./mvnw; Write/Edit are denied so
+  # a run-and-report task cannot mutate the tree mid-push, whatever the subagent
+  # frontmatter allows.
+  run_claude "$test_prompt" "$TEST_TIMEOUT" "Task Bash Read Grep Glob" "Write Edit"
 
   if [ -n "$CLAUDE_TIMED_OUT" ]; then
     echo "pre-push: test run timed out after ${TEST_TIMEOUT}s — allowing push." >&2
