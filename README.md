@@ -176,12 +176,15 @@ docs/ARCHITECTURE.md                  # Design decisions and how the pieces fit
 | Test | Type | Needs Postgres? |
 |---|---|---|
 | `ApplicationTests.contextLoads` | `@SpringBootTest` — boots the full context | Yes |
+| `SoftwareEngineerRepositoryTest` | `@SpringBootTest` + `@Transactional` — JPA mapping (UUID generation, `techStack` side table) against real Postgres, rolled back | Yes |
 | `SoftwareEngineerControllerTest` | `@WebMvcTest` slice — MockMvc against the controller with the service mocked | No |
 | `SoftwareEngineerServiceTest` | Plain Mockito unit test — service with the repository mocked | No |
+| `DataSeederTest` | Plain Mockito unit test — seeds only when the table is empty | No |
+| `SoftwareEngineerTest` | Plain unit test — entity accessors and `equals`/`hashCode` | No |
 
 Spring skips Docker Compose startup in tests (`spring.docker.compose.skip.in-tests`
-defaults to `true`), so `ApplicationTests` needs **Postgres already running** or it fails
-to obtain a datasource:
+defaults to `true`), so the two `@SpringBootTest` classes need **Postgres already running**
+or they fail to obtain a datasource:
 
 ```bash
 docker compose up -d db && ./mvnw test
