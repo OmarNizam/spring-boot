@@ -12,12 +12,15 @@ import jakarta.persistence.JoinColumn;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+
+import static jakarta.persistence.GenerationType.UUID;
 
 @Entity
 public class SoftwareEngineer {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @GeneratedValue(strategy = UUID)
+    private UUID id;
     private String name;
 
     @ElementCollection(fetch = FetchType.EAGER)
@@ -36,17 +39,17 @@ public class SoftwareEngineer {
         this.techStack = techStack;
     }
 
-    public SoftwareEngineer(Integer id, String name, List<String> techStack) {
+    public SoftwareEngineer(UUID id, String name, List<String> techStack) {
         this.id = id;
         this.name = name;
         this.techStack = techStack;
     }
 
-    public Integer getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 
