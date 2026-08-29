@@ -14,8 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Exercises the JPA mapping against the real Postgres container. Like {@link ApplicationTests}
  * this needs the database running, and it assumes the schema (including the
  * {@code software_engineer_tech_stack} side table) already exists — Hibernate's
- * {@code ddl-auto=create-drop} builds it at context startup. {@code @Transactional} rolls
- * each test back so the {@code DataSeeder} rows stay untouched.
+ * {@code ddl-auto=update} creates any missing tables at context startup. {@code @Transactional}
+ * rolls each test back so the {@code DataSeeder} rows stay untouched.
  */
 @SpringBootTest
 @Transactional
