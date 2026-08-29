@@ -66,6 +66,7 @@ class SoftwareEngineerControllerTest {
                 .willThrow(new RuntimeException("repository is down"));
 
         assertThatThrownBy(() -> mockMvc.perform(get("/api/v1/software-engineers")))
+                .hasRootCauseInstanceOf(RuntimeException.class)
                 .hasRootCauseMessage("repository is down");
     }
 }
