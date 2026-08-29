@@ -108,6 +108,8 @@ pushed. Activate once per clone: `git config core.hooksPath .githooks`.
 1. **`unit-tester`** runs `./mvnw test` + prints a coverage table. Blocks the
    push only on a real test failure (`TEST_RESULT: FAIL`); a coverage number
    never blocks; if Postgres is down it reports `SKIP` and the push proceeds.
+   Runs against the working tree, so it is gated: only when the push touches
+   `src/`/`pom.xml`, the tree is clean, and `HEAD` is a pushed tip.
 2. **`code-reviewer`** reviews the diff. Blocks only on a 🔴 blocker
    (`REVIEW_RESULT: BLOCK`).
 
