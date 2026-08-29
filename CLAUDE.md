@@ -118,3 +118,22 @@ Bypass: `SKIP_TESTS=1`, `SKIP_CODE_REVIEW=1`, or `git push --no-verify`.
 
 Subagent definitions live in `.claude/agents/`. When changing behaviour that the
 hook or the agents describe, update the agent `.md` and `.githooks/README.md` too.
+
+## CI
+
+`.github/workflows/ci.yml` runs `./mvnw -B verify` on every push to `main` and
+every pull request. It stands up Postgres as a GitHub Actions `services:`
+container mapped to host port **5332** (same DB name/user/password as
+`compose.yaml`), so the tests hit the same `spring.datasource.url` as a local
+run — no env override. `verify` (not `test`) so a broken jar build also fails
+CI. The JaCoCo report is uploaded as a build artifact; there is **no coverage
+gate** (see Coverage above).
+
+The pre-push hook and CI overlap on purpose: the hook is a fast, best-effort
+local gate against the **working tree** (fails open, easily bypassed); CI is the
+authoritative gate on the **pushed ref**. Keep the two Postgres setups
+(`compose.yaml` port mapping / DB credentials and `ci.yml`'s `services:` block)
+in sync.
+
+The other two workflows (`claude.yml`, `claude-code-review.yml`) are the Claude
+GitHub App boilerplate — unrelated to build/test.
