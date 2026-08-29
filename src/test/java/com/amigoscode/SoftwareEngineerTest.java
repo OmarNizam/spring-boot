@@ -41,19 +41,37 @@ class SoftwareEngineerTest {
         assertThat(engineer.getTechStack()).containsExactly("go");
     }
 
+    /**
+     * Documents the current IDE-generated {@code equals}: two engineers are equal only when
+     * <em>every</em> field matches, id included. ARCHITECTURE.md flags this as fragile for a
+     * JPA entity (see "Known rough edges"); this test pins the behaviour as it stands rather
+     * than endorsing it.
+     */
     @Test
-    void equalsAndHashCodeCoverAllFields() {
+    void equalsComparesEveryField() {
         UUID id = UUID.randomUUID();
-        SoftwareEngineer a = new SoftwareEngineer(id, "James", List.of("java"));
-        SoftwareEngineer sameValues = new SoftwareEngineer(id, "James", List.of("java"));
+        SoftwareEngineer engineer = new SoftwareEngineer(id, "James", List.of("java"));
 
-        assertThat(a)
-                .isEqualTo(sameValues)
-                .hasSameHashCodeAs(sameValues)
+        assertThat(engineer)
+                .isEqualTo(new SoftwareEngineer(id, "James", List.of("java")))
                 .isNotEqualTo(new SoftwareEngineer(UUID.randomUUID(), "James", List.of("java")))
                 .isNotEqualTo(new SoftwareEngineer(id, "Jamila", List.of("java")))
                 .isNotEqualTo(new SoftwareEngineer(id, "James", List.of("python")))
                 .isNotEqualTo(null)
                 .isNotEqualTo("not an engineer");
+    }
+
+    /**
+     * Only the required part of the contract — equal objects share a hash code. We do not
+     * assert what {@code hashCode} is built from: because it currently includes the generated
+     * id, the value changes when a transient instance is persisted, which is exactly the
+     * fragility ARCHITECTURE.md warns about.
+     */
+    @Test
+    void equalEngineersShareAHashCode() {
+        UUID id = UUID.randomUUID();
+        SoftwareEngineer engineer = new SoftwareEngineer(id, "James", List.of("java"));
+
+        assertThat(engineer).hasSameHashCodeAs(new SoftwareEngineer(id, "James", List.of("java")));
     }
 }

@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -36,8 +37,11 @@ class DataSeederTest {
 
         verify(softwareEngineerRepository).saveAll(engineersCaptor.capture());
         assertThat(engineersCaptor.getValue())
-                .extracting(SoftwareEngineer::getName)
-                .containsExactly("James", "Jamila");
+                .extracting(SoftwareEngineer::getName, SoftwareEngineer::getTechStack)
+                .containsExactly(
+                        tuple("James", List.of("js, node, vue, java, spring boot")),
+                        tuple("Jamila", List.of("js, node, vue, python, FastApi"))
+                );
     }
 
     @Test
