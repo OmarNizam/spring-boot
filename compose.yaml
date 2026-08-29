@@ -5,7 +5,7 @@ services:
     profiles: ["full"]
     build: .
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5332/postgres-spring-boot
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/postgres-spring-boot
       SPRING_DATASOURCE_USERNAME: amigoscode
       SPRING_DATASOURCE_PASSWORD: password
     networks:
