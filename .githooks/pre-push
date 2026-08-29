@@ -12,12 +12,19 @@
 #
 # Bypass:  git push --no-verify        (skips all hooks)
 #     or:  SKIP_TESTS=1 git push       (skips just the test run)
-#     or:  SKIP_CODE_REVIEW=1 git push (skips just the review)
+#     or:  SKIP_CODE_REVIEW=1 git push (skips just the review — the test run
+#                                       still happens; use SKIP_TESTS too, or
+#                                       --no-verify, for a fully unchecked push)
 #
 # Tunables (env):
-#   CLAUDE_BIN             path to the claude CLI (default: ~/.local/bin/claude or $PATH)
-#   TEST_TIMEOUT          seconds before the test run is abandoned (default: 600)
-#   CODE_REVIEW_TIMEOUT   seconds before the review is abandoned (default: 600)
+#   CLAUDE_BIN           path to the claude CLI (default: ~/.local/bin/claude or $PATH)
+#   TEST_TIMEOUT         seconds before the test run is abandoned (default: 600)
+#   CODE_REVIEW_TIMEOUT  seconds before the review is abandoned (default: 600)
+#
+# The test phase pre-approves the Bash tool for the run (claude -p --allowedTools
+# "Task Bash Read Grep Glob") so the subagent can invoke `./mvnw test`. That is a
+# deliberate trade-off, consistent with the review phase already trusting `claude
+# -p`. A whole-suite run can approach TEST_TIMEOUT on a cold cache.
 #
 # Fails open: any error, timeout, unreadable verdict, or environment problem
 # (e.g. Postgres not listening on 5332) allows the push. Only an explicit
@@ -38,6 +45,12 @@ TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+
+# Git exports GIT_DIR (and friends) into hook processes; in a worktree that points
+# at the main repo's per-worktree gitdir. run_claude passes the whole environment
+# through, so a stray `git` call by the build or subagent would resolve against
+# the wrong repo. Drop them — git rediscovers the repo from $repo_root/cwd.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_QUARANTINE_PATH GIT_QUARANTINE_ENVIRONMENT
 
 empty_tree="$(git hash-object -t tree /dev/null)"
 
@@ -68,10 +81,13 @@ run_claude() {
 
   set +e
   if [ -n "$TIMEOUT_BIN" ]; then
-    printf '%s' "$prompt" | "$TIMEOUT_BIN" "$timeout_s" \
+    # -k 5: SIGKILL 5s after SIGTERM if claude ignores the term (matches the
+    # portable watchdog below). Exit 124 is timeout(1)'s "killed on timeout"
+    # code; claude itself never exits 124, so treating it as a timeout is safe.
+    printf '%s' "$prompt" | "$TIMEOUT_BIN" -k 5 "$timeout_s" \
       "$CLAUDE_BIN" -p --allowedTools "$tools" >"$outfile" 2>"$errfile"
     CLAUDE_STATUS=$?
-    [ "$CLAUDE_STATUS" -eq 124 ] && : >"$timeout_flag"
+    { [ "$CLAUDE_STATUS" -eq 124 ] || [ "$CLAUDE_STATUS" -eq 137 ]; } && : >"$timeout_flag"
   else
     # No timeout(1) available (e.g. stock macOS): portable watchdog.
     printf '%s' "$prompt" | "$CLAUDE_BIN" -p --allowedTools "$tools" \
@@ -97,17 +113,22 @@ run_claude() {
   rm -f "$outfile" "$errfile" "$timeout_flag"
 }
 
-# Last non-blank line if it carries the marker, else the last anchored match
-# anywhere — so a marker string quoted inside reviewed content can't be mistaken
-# for the verdict.  args: <text> <marker> <alternation e.g. PASS|FAIL>
+# Extract just the verdict token (e.g. PASS) for <marker> from <text>. Tries the
+# last non-blank line first, accepting trailing prose after the token; if that
+# line has no valid token, falls back to the last strictly-anchored match
+# anywhere — so a marker quoted inside reviewed content can't be mistaken for the
+# verdict. Echoes the bare token, or nothing.
+#   args: <text> <marker> <alternation, e.g. PASS|FAIL>
 read_verdict() {
-  local text="$1" marker="$2" alt="$3" last
+  local text="$1" marker="$2" alt="$3" last tok
   last="$(printf '%s\n' "$text" | awk 'NF{l=$0} END{print l}')"
-  case "$last" in
-    *"$marker":*) printf '%s\n' "$last" ;;
-    *) printf '%s\n' "$text" \
-         | grep -E "^[[:space:]]*${marker}:[[:space:]]*(${alt})[[:space:]]*$" | tail -n1 || true ;;
-  esac
+  tok="$(printf '%s\n' "$last" \
+    | sed -nE "s/.*${marker}:[[:space:]]*(${alt}).*/\1/p" | head -n1)"
+  if [ -z "$tok" ]; then
+    tok="$(printf '%s\n' "$text" \
+      | sed -nE "s/^[[:space:]]*${marker}:[[:space:]]*(${alt})[[:space:]]*\$/\1/p" | tail -n1)"
+  fi
+  printf '%s\n' "$tok"
 }
 
 # Resolve a review range for a ref being pushed, as "<base> <tip>" (two-arg
@@ -228,13 +249,13 @@ EOF
     echo "─────────────────────────────────────────────────────────────────────"
     echo
     case "$(read_verdict "$CLAUDE_OUT" TEST_RESULT 'PASS|FAIL|SKIP')" in
-      *FAIL*)
+      FAIL)
         echo "pre-push: test suite failed. Push aborted." >&2
         echo "         Fix the tests, or bypass with:  SKIP_TESTS=1 git push" >&2
         exit 1 ;;
-      *PASS*)
+      PASS)
         echo "pre-push: tests passed." ;;
-      *SKIP*)
+      SKIP)
         echo "pre-push: tests could not run (environment) — allowing push." >&2 ;;
       *)
         echo "pre-push: could not read a TEST_RESULT verdict — allowing push." >&2 ;;
@@ -298,12 +319,12 @@ echo "────────────────────────�
 echo
 
 case "$(read_verdict "$review" REVIEW_RESULT 'PASS|BLOCK')" in
-  *BLOCK*)
+  BLOCK)
     echo "pre-push: review found 🔴 blocker(s). Push aborted." >&2
     echo "         Fix the issues, or bypass with:  SKIP_CODE_REVIEW=1 git push" >&2
     exit 1
     ;;
-  *PASS*)
+  PASS)
     echo "pre-push: review passed."
     exit 0
     ;;
