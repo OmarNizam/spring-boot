@@ -1,5 +1,6 @@
 package com.amigoscode;
 
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * "The write path" justifies the DTO design with "the service maps it to a fresh entity
  * with a {@code null} id, which forces the insert path" — that claim is verified here
  * end-to-end against a real persistence context (a new row appears and reloads intact),
- * not a mock.
+ * not a mock. The persistence context is cleared between the insert and the reload so
+ * {@code findById} issues a real SELECT rather than returning the managed instance.
  */
 @SpringBootTest
 @Transactional
@@ -34,6 +36,9 @@ class SoftwareEngineerServiceIntegrationTest {
     @Autowired
     private SoftwareEngineerRepository softwareEngineerRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     @Test
     void insertSoftwareEngineer_insertsANewRowThatReloadsWithAGeneratedId() {
         long before = softwareEngineerRepository.count();
@@ -42,6 +47,9 @@ class SoftwareEngineerServiceIntegrationTest {
                 new CreateSoftwareEngineerRequest("Carla", List.of("scala", "zio"))
         );
         softwareEngineerRepository.flush();
+        // Drop the first-level cache so findById below is a real SELECT, not a
+        // handback of the still-managed `created` instance.
+        entityManager.clear();
 
         assertThat(created.getId()).isNotNull();
         assertThat(softwareEngineerRepository.count()).isEqualTo(before + 1);
