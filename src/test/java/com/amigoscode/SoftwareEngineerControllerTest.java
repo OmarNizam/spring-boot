@@ -141,4 +141,36 @@ class SoftwareEngineerControllerTest {
 
         verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
     }
+
+    /**
+     * {@code @NotEmpty} on the list only guards its size; {@code List<@NotBlank String>} is a
+     * separate container-element constraint. Pins that a whitespace-only entry is rejected
+     * before the service runs, so a blank tech string never reaches the side table.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsBlankTechStackElementWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": ["java", "  "]}"""))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    /**
+     * A body Jackson cannot parse fails as {@code HttpMessageNotReadableException} — a
+     * different path from the bean-validation 400s above. Pins the framework-default 400;
+     * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md
+     * "The write path" / "Still open"). Rewrite to assert the chosen body once one exists.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsMalformedJsonWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Anne\","))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
 }
