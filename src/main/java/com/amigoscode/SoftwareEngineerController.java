@@ -1,6 +1,13 @@
 package com.amigoscode;
 
-import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -20,7 +27,11 @@ public class SoftwareEngineerController {
     }
 
     @PostMapping
-    public void createSoftwareEngineer(@RequestBody SoftwareEngineer softwareEngineer) {
-        softwareEngineerService.insertSoftwareEngineer(softwareEngineer);
+    public ResponseEntity<SoftwareEngineer> createSoftwareEngineer(
+            @Valid @RequestBody CreateSoftwareEngineerRequest request) {
+        SoftwareEngineer created = softwareEngineerService.insertSoftwareEngineer(request);
+        // 201 with the persisted entity so the caller learns the generated id.
+        // No Location header: there is no GET-by-id endpoint to point it at yet.
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 }

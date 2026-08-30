@@ -141,25 +141,28 @@ These are inherited from the project template or the course exercises and are no
   on persist, not at construction). It works here because entities are never put in
   hash-based collections before saving.
 
-## Extending this
+## The write path
 
-Adding a write endpoint is the natural next step — through the service, which is where the
-seam already exists:
+`POST /api/v1/software-engineers` creates one engineer, through the same
+`Controller → Service → repository` seam as the read path.
 
-```java
-// SoftwareEngineerService
-public SoftwareEngineer add(SoftwareEngineer engineer) {
-    return softwareEngineerRepository.save(engineer);
-}
+- **The request body is `CreateSoftwareEngineerRequest`, not the entity.** Binding
+  `@RequestBody SoftwareEngineer` directly would let a caller supply `id`.
+  `JpaRepository.save` picks insert vs. update from `isNew(entity)`, which for a
+  `@GeneratedValue` UUID with no `@Version` is just `id == null` — so a body with a
+  known `id` (and every `id` is returned by the GET) would `merge()` over an
+  existing row, and a partial body would null out that row's `techStack`. The
+  request record carries only `name` + `techStack`; the service maps it to a fresh
+  entity with a `null` id, which forces the insert path.
+- **Input is validated** (`@Valid` on the parameter, `spring-boot-starter-validation`
+  on the classpath): `name` `@NotBlank`, `techStack` `@NotEmpty` of `@NotBlank`.
+  A violation is a 400 before the service is called.
+- **Responds `201 Created`** with the persisted entity so the caller learns the
+  generated `id`. No `Location` header — there is no GET-by-id endpoint to point it
+  at yet.
 
-// SoftwareEngineerController
-@PostMapping
-public SoftwareEngineer add(@RequestBody SoftwareEngineer engineer) {
-    return softwareEngineerService.add(engineer);
-}
-```
-
-Beyond that, in rough order of value: a DTO so the JPA entity isn't the API contract,
-`@RestControllerAdvice` for error handling, bean validation on input, Flyway for schema
-management, and Testcontainers so tests provision their own database instead of depending
-on a running container.
+Still open, in rough order of value: a response DTO so the JPA entity isn't the API
+contract on the way out either, `@RestControllerAdvice` for error handling (the 400
+above is Spring's default shape), a GET-by-id endpoint (+ `Location` on create),
+Flyway for schema management, and Testcontainers so tests provision their own
+database instead of depending on a running container.

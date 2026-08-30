@@ -18,7 +18,9 @@ public class SoftwareEngineerService {
        return  softwareEngineerRepository.findAll();
     }
 
-    public void insertSoftwareEngineer(SoftwareEngineer softwareEngineer) {
-        softwareEngineerRepository.save(softwareEngineer);
+    public SoftwareEngineer insertSoftwareEngineer(CreateSoftwareEngineerRequest request) {
+        // Build a fresh entity: id stays null, so save() inserts rather than merges.
+        SoftwareEngineer engineer = new SoftwareEngineer(request.name(), request.techStack());
+        return softwareEngineerRepository.save(engineer);
     }
 }
