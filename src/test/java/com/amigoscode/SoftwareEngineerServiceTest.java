@@ -2,6 +2,7 @@ package com.amigoscode;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -42,5 +44,24 @@ class SoftwareEngineerServiceTest {
 
         assertThat(softwareEngineerService.getAllSoftwareEngineers()).isEmpty();
         verify(softwareEngineerRepository).findAll();
+    }
+
+    @Test
+    void insertSoftwareEngineer_savesNewEntityWithNullIdAndReturnsSaved() {
+        CreateSoftwareEngineerRequest request =
+                new CreateSoftwareEngineerRequest("Anne", List.of("java", "spring"));
+        SoftwareEngineer persisted =
+                new SoftwareEngineer(UUID.randomUUID(), "Anne", List.of("java", "spring"));
+        given(softwareEngineerRepository.save(any(SoftwareEngineer.class))).willReturn(persisted);
+
+        SoftwareEngineer result = softwareEngineerService.insertSoftwareEngineer(request);
+
+        assertThat(result).isSameAs(persisted);
+        ArgumentCaptor<SoftwareEngineer> captor = ArgumentCaptor.forClass(SoftwareEngineer.class);
+        verify(softwareEngineerRepository).save(captor.capture());
+        // id must be null so JpaRepository.save() inserts instead of merging an existing row.
+        assertThat(captor.getValue().getId()).isNull();
+        assertThat(captor.getValue().getName()).isEqualTo("Anne");
+        assertThat(captor.getValue().getTechStack()).containsExactly("java", "spring");
     }
 }

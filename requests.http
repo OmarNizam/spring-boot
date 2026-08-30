@@ -4,11 +4,11 @@ GET  http://localhost:8080
 ### All software engineers
 GET http://localhost:8080/api/v1/software-engineers
 
-### Insert new software engineer
+### Insert new software engineer (201 Created, body echoes the generated id)
 POST http://localhost:8080/api/v1/software-engineers
 Content-Type: application/json
 
 {
   "name": "Anne",
-  "techStack": ["java, spring boot, spring"]
+  "techStack": ["java", "spring boot", "spring"]
 }
