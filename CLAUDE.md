@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A small Spring Boot 4 + PostgreSQL REST API (a read and a create endpoint) built from the
+A small Spring Boot 4 + PostgreSQL REST API (list, get-by-id, and create endpoints) built from the
 Amigoscode course. `README.md` covers running it; `docs/ARCHITECTURE.md` covers
 *why* it is wired the way it is and the non-obvious behaviour — read it before
 changing the persistence layer, the compose setup, or the seeder.
@@ -46,9 +46,11 @@ gate — do not add tests whose only purpose is moving the number.
 ## Architecture
 
 `Controller → Service → Spring Data `JpaRepository` → Hibernate → Postgres`.
-The read path (`GET`) is a pass-through the service; the create path (`POST`) maps
-a `CreateSoftwareEngineerRequest` to a fresh entity in the service so a client
-cannot supply `id` (see "The write path" in `docs/ARCHITECTURE.md`).
+The read paths (`GET` list, `GET /{id}`) are near pass-throughs the service —
+get-by-id returns `Optional` and the controller maps empty to `404`; the create
+path (`POST`) maps a `CreateSoftwareEngineerRequest` to a fresh entity in the
+service so a client cannot supply `id` (see "The write path" and "The
+read-by-id path" in `docs/ARCHITECTURE.md`).
 
 Non-obvious pieces, all explained in `docs/ARCHITECTURE.md`:
 
