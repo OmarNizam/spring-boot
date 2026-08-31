@@ -35,8 +35,7 @@ public class SoftwareEngineerController {
         //
         // Taint analysis flags `created` as request-derived data reaching a response
         // sink. Not a real XSS vector here: @RestController serialises via Jackson as
-        // application/json, which browsers never render as markup, and the request
-        // fields are length-bounded by CreateSoftwareEngineerRequest's @Size.
+        // application/json, which browsers never render as markup.
         //noinspection JvmTaintAnalysis
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }

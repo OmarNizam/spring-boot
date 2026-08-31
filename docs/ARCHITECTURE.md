@@ -164,7 +164,7 @@ These are inherited from the project template or the course exercises and are no
   at yet. IDEA Ultimate's taint analysis (`JvmTaintAnalysis`) flags the entity in
   the response body as request-derived data reaching an XSS sink; it is suppressed
   at the `return` with a comment — the `@RestController` serialises JSON, which is
-  not an HTML sink, and the fields are length-bounded above.
+  not an HTML sink.
 
 Still open, in rough order of value: a response DTO so the JPA entity isn't the API
 contract on the way out either, `@RestControllerAdvice` for error handling (the 400
