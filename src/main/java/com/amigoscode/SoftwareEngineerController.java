@@ -48,9 +48,11 @@ public class SoftwareEngineerController {
                 .path("/{id}")
                 .buildAndExpand(created.getId())
                 .toUri();
-        // Taint analysis flags `created` as request-derived data reaching a response
-        // sink. Not a real XSS vector here: @RestController serialises via Jackson as
-        // application/json, which browsers never render as markup.
+        // Taint analysis flags `created` (and `location`, via fromCurrentRequest())
+        // as request-derived data reaching a response sink. Not a real XSS vector
+        // here: @RestController serialises the body via Jackson as application/json,
+        // and Location is a header, not an HTML sink — browsers never render either
+        // as markup.
         //noinspection JvmTaintAnalysis
         return ResponseEntity.created(location).body(created);
     }

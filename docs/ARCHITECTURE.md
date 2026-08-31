@@ -178,7 +178,9 @@ until a `@RestControllerAdvice` exists. HTTP-status decisions stay in the
 controller; the service exposes `Optional<SoftwareEngineer>`, mirroring how the
 create path keeps `ResponseEntity` construction out of the service.
 
-Still open, in rough order of value: a response DTO so the JPA entity isn't the API
+## Still open
+
+In rough order of value: a response DTO so the JPA entity isn't the API
 contract on the way out either, `@RestControllerAdvice` for error handling (the 400s
 above are Spring's default shape), Flyway for schema management, and Testcontainers
 so tests provision their own database instead of depending on a running container.
