@@ -159,6 +159,23 @@ class SoftwareEngineerControllerTest {
     }
 
     /**
+     * {@code @Size(max = 255)} on {@code name} bounds what a single request can persist.
+     * Pins that an over-long name is rejected before the service runs.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsOversizeNameWith400() throws Exception {
+        String tooLong = "a".repeat(256);
+
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "%s", "techStack": ["java"]}""".formatted(tooLong)))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    /**
      * A body Jackson cannot parse fails as {@code HttpMessageNotReadableException} — a
      * different path from the bean-validation 400s above. Pins the framework-default 400;
      * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md
