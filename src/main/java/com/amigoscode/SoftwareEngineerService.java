@@ -31,4 +31,22 @@ public class SoftwareEngineerService {
         SoftwareEngineer engineer = new SoftwareEngineer(request.name(), request.techStack());
         return softwareEngineerRepository.save(engineer);
     }
+
+    // true when a row was removed, false when no row had that id; the controller
+    // turns false into a 404. HTTP-status decisions stay in the controller, as on
+    // the read-by-id and create paths.
+    //
+    // existsById + deleteById is two statements with a TOCTOU gap: a concurrent
+    // delete of the same id could make deleteById a no-op after existsById saw the
+    // row. Harmless here (the outcome — row gone, caller told so — is the same) and
+    // left un-guarded rather than wrapped in @Transactional, an idiom nothing else
+    // in this app uses. deleteById itself is a silent no-op on an unknown id in
+    // Spring Data JPA, so the guard is what produces the 404, not a caught exception.
+    public boolean deleteSoftwareEngineerById(UUID id) {
+        if (!softwareEngineerRepository.existsById(id)) {
+            return false;
+        }
+        softwareEngineerRepository.deleteById(id);
+        return true;
+    }
 }

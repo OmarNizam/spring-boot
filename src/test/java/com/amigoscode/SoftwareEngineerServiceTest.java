@@ -14,6 +14,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,5 +84,23 @@ class SoftwareEngineerServiceTest {
         assertThat(captor.getValue().getId()).isNull();
         assertThat(captor.getValue().getName()).isEqualTo("Anne");
         assertThat(captor.getValue().getTechStack()).containsExactly("java", "spring");
+    }
+
+    @Test
+    void deleteSoftwareEngineerById_deletesAndReturnsTrueWhenRowExists() {
+        UUID id = UUID.randomUUID();
+        given(softwareEngineerRepository.existsById(id)).willReturn(true);
+
+        assertThat(softwareEngineerService.deleteSoftwareEngineerById(id)).isTrue();
+        verify(softwareEngineerRepository).deleteById(id);
+    }
+
+    @Test
+    void deleteSoftwareEngineerById_returnsFalseAndDoesNotDeleteWhenNoSuchRow() {
+        UUID id = UUID.randomUUID();
+        given(softwareEngineerRepository.existsById(id)).willReturn(false);
+
+        assertThat(softwareEngineerService.deleteSoftwareEngineerById(id)).isFalse();
+        verify(softwareEngineerRepository, never()).deleteById(any());
     }
 }

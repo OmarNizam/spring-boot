@@ -22,6 +22,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -262,6 +263,40 @@ class SoftwareEngineerControllerTest {
      * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md
      * "The write path" / "Still open"). Rewrite to assert the chosen body once one exists.
      */
+    @Test
+    void deleteEngineerById_returns204WhenServiceRemovedARow() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.deleteSoftwareEngineerById(id)).willReturn(true);
+
+        mockMvc.perform(delete("/api/v1/software-engineers/{id}", id))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void deleteEngineerById_returns404WhenServiceRemovedNothing() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.deleteSoftwareEngineerById(id)).willReturn(false);
+
+        mockMvc.perform(delete("/api/v1/software-engineers/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(SoftwareEngineerNotFoundException.class));
+    }
+
+    /**
+     * A non-UUID path segment fails Spring's {@code String}→{@code UUID} conversion as a
+     * framework-default 400 before the handler runs — same path as the GET-by-id case.
+     * Pins that the service is never consulted for a malformed id.
+     */
+    @Test
+    void deleteEngineerById_rejectsNonUuidIdWith400() throws Exception {
+        mockMvc.perform(delete("/api/v1/software-engineers/not-a-uuid"))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).deleteSoftwareEngineerById(any());
+    }
+
     @Test
     void createSoftwareEngineer_rejectsMalformedJsonWith400() throws Exception {
         mockMvc.perform(post("/api/v1/software-engineers")
