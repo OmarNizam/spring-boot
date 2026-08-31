@@ -159,6 +159,59 @@ class SoftwareEngineerControllerTest {
     }
 
     /**
+     * {@code @Size(max = 255)} on {@code name} bounds what a single request can persist.
+     * Pins that an over-long name is rejected before the service runs.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsOversizeNameWith400() throws Exception {
+        String tooLong = "a".repeat(256);
+
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "%s", "techStack": ["java"]}""".formatted(tooLong)))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    /**
+     * {@code @Size(max = 50)} on the list itself bounds how many rows a single request can
+     * insert into {@code software_engineer_tech_stack}. Pins that an over-long list is
+     * rejected before the service runs.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsOversizeTechStackWith400() throws Exception {
+        String tooMany = ("\"t\",".repeat(51)).replaceAll(",$", "");
+
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": [%s]}""".formatted(tooMany)))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    /**
+     * {@code List<@Size(max = 255) String>} is a container-element constraint, separate from
+     * the list-size cap above. Pins that a single over-long tech string is rejected before
+     * the service runs, so nothing wider than the {@code tech} column reaches the side table.
+     */
+    @Test
+    void createSoftwareEngineer_rejectsOversizeTechStackElementWith400() throws Exception {
+        String tooLong = "a".repeat(256);
+
+        mockMvc.perform(post("/api/v1/software-engineers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": ["java", "%s"]}""".formatted(tooLong)))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    /**
      * A body Jackson cannot parse fails as {@code HttpMessageNotReadableException} — a
      * different path from the bean-validation 400s above. Pins the framework-default 400;
      * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md

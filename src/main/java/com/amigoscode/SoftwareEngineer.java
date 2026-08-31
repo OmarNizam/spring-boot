@@ -8,6 +8,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +17,8 @@ import java.util.UUID;
 
 import static jakarta.persistence.GenerationType.UUID;
 
+@Setter
+@Getter
 @Entity
 public class SoftwareEngineer {
     @Id
@@ -41,30 +45,6 @@ public class SoftwareEngineer {
     public SoftwareEngineer(UUID id, String name, List<String> techStack) {
         this.id = id;
         this.name = name;
-        this.techStack = techStack;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public List<String> getTechStack() {
-        return techStack;
-    }
-
-    public void setTechStack(List<String> techStack) {
         this.techStack = techStack;
     }
 

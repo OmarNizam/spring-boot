@@ -32,6 +32,11 @@ public class SoftwareEngineerController {
         SoftwareEngineer created = softwareEngineerService.insertSoftwareEngineer(request);
         // 201 with the persisted entity so the caller learns the generated id.
         // No Location header: there is no GET-by-id endpoint to point it at yet.
+        //
+        // Taint analysis flags `created` as request-derived data reaching a response
+        // sink. Not a real XSS vector here: @RestController serialises via Jackson as
+        // application/json, which browsers never render as markup.
+        //noinspection JvmTaintAnalysis
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 }

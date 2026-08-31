@@ -155,11 +155,16 @@ These are inherited from the project template or the course exercises and are no
   request record carries only `name` + `techStack`; the service maps it to a fresh
   entity with a `null` id, which forces the insert path.
 - **Input is validated** (`@Valid` on the parameter, `spring-boot-starter-validation`
-  on the classpath): `name` `@NotBlank`, `techStack` `@NotEmpty` of `@NotBlank`.
-  A violation is a 400 before the service is called.
+  on the classpath): `name` `@NotBlank @Size(max = 255)`, `techStack` `@NotEmpty`
+  (`@Size(max = 50)`) of `@NotBlank @Size(max = 255)`. The `@Size` caps bound what
+  one unauthenticated request can persist; 255 matches Hibernate's default
+  `varchar` length. A violation is a 400 before the service is called.
 - **Responds `201 Created`** with the persisted entity so the caller learns the
   generated `id`. No `Location` header — there is no GET-by-id endpoint to point it
-  at yet.
+  at yet. IDEA Ultimate's taint analysis (`JvmTaintAnalysis`) flags the entity in
+  the response body as request-derived data reaching an XSS sink; it is suppressed
+  at the `return` with a comment — the `@RestController` serialises JSON, which is
+  not an HTML sink.
 
 Still open, in rough order of value: a response DTO so the JPA entity isn't the API
 contract on the way out either, `@RestControllerAdvice` for error handling (the 400
