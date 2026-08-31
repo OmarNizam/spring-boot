@@ -154,6 +154,7 @@ All settings live in `src/main/resources/application.properties`.
 | `spring.jpa.show-sql` / `spring.jpa.properties.hibernate.format_sql` | `true` / `true` | Logs generated SQL, pretty-printed |
 | `spring.jpa.properties.hibernate.dialect` | `org.hibernate.dialect.PostgreSQLDialect` | Pinned explicitly |
 | `spring.docker.compose.lifecycle-management` | `start-only` | Leaves Postgres running after app shutdown |
+| `spring.web.error.include-stacktrace` | `never` | Keeps the exception trace out of JSON error bodies (devtools would otherwise force `always` in dev). Boot 4 renamed this from `server.error.*` |
 
 ## Project structure
 
