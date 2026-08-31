@@ -59,4 +59,36 @@ class SoftwareEngineerServiceIntegrationTest {
         assertThat(reloaded.getName()).isEqualTo("Carla");
         assertThat(reloaded.getTechStack()).containsExactlyInAnyOrder("scala", "zio");
     }
+
+    /**
+     * The service method returns a plain boolean; only a real persistence context shows
+     * what {@code deleteById} actually does to the {@code software_engineer_tech_stack}
+     * side table. Verifies the row and its {@code @ElementCollection} entries both go —
+     * no orphaned tech rows — and that a second delete of the same id reports {@code false}.
+     */
+    @Test
+    void deleteSoftwareEngineerById_removesTheRowAndItsTechStackSideTable() {
+        SoftwareEngineer created = softwareEngineerService.insertSoftwareEngineer(
+                new CreateSoftwareEngineerRequest("Dana", List.of("rust", "wasm"))
+        );
+        softwareEngineerRepository.flush();
+        UUID id = created.getId();
+
+        Number techBefore = (Number) entityManager.createNativeQuery(
+                        "select count(*) from software_engineer_tech_stack where software_engineer_id = :id")
+                .setParameter("id", id).getSingleResult();
+        assertThat(techBefore.longValue()).isEqualTo(2);
+
+        assertThat(softwareEngineerService.deleteSoftwareEngineerById(id)).isTrue();
+        softwareEngineerRepository.flush();
+        entityManager.clear();
+
+        assertThat(softwareEngineerRepository.findById(id)).isEmpty();
+        Number techAfter = (Number) entityManager.createNativeQuery(
+                        "select count(*) from software_engineer_tech_stack where software_engineer_id = :id")
+                .setParameter("id", id).getSingleResult();
+        assertThat(techAfter.longValue()).isZero();
+
+        assertThat(softwareEngineerService.deleteSoftwareEngineerById(id)).isFalse();
+    }
 }

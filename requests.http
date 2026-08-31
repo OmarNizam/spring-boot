@@ -15,3 +15,6 @@ Content-Type: application/json
   "name": "Anne",
   "techStack": ["java", "spring boot", "spring"]
 }
+
+### Delete software engineer by id (204 No Content; 404 if unknown, 400 if not a UUID)
+DELETE http://localhost:8080/api/v1/software-engineers/3fa85f64-5717-4562-b3fc-2c963f66afa6

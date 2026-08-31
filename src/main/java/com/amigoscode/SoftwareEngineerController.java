@@ -2,6 +2,7 @@ package com.amigoscode;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,5 +56,16 @@ public class SoftwareEngineerController {
         // as markup.
         //noinspection JvmTaintAnalysis
         return ResponseEntity.created(location).body(created);
+    }
+
+    @DeleteMapping("{id}")
+    public ResponseEntity<Void> deleteEngineerById(@PathVariable UUID id) {
+        // Unknown id -> 404, same seam as the GET-by-id path: the service reports
+        // whether a row was removed, the controller maps that to HTTP. A non-UUID
+        // path segment fails type conversion as a default 400 before we get here.
+        if (!softwareEngineerService.deleteSoftwareEngineerById(id)) {
+            throw new SoftwareEngineerNotFoundException(id);
+        }
+        return ResponseEntity.noContent().build();
     }
 }

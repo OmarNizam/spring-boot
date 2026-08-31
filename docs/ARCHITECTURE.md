@@ -185,6 +185,37 @@ the create path keeps `ResponseEntity` construction out of the service: the
 persistence seam reports "present or not", the web layer decides what that means
 over HTTP.
 
+## The delete path
+
+`DELETE /api/v1/software-engineers/{id}` goes through the same
+`Controller → Service → repository` seam, and follows the read-by-id split: the
+service reports what happened to the persistence layer, the controller turns that
+into HTTP.
+
+- **The service returns a `boolean`**, not `void` — `true` when a row was
+  removed, `false` when no row had that id. `SoftwareEngineerService.deleteSoftwareEngineerById`
+  guards with `existsById` before `deleteById` and returns the guard's result.
+  The guard is load-bearing: Spring Data JPA's `deleteById` is a **silent no-op**
+  on an unknown id (the old `EmptyResultDataAccessException` was dropped in Data
+  JPA 3), so without the check the controller could never tell a real delete from
+  a miss.
+- **The controller maps `false` to a `404`** by throwing the existing
+  `SoftwareEngineerNotFoundException` — same 404 type and mechanism as the
+  read-by-id path — and `true` to **`204 No Content`** with an empty body. A
+  non-UUID path segment fails Spring's `String`→`UUID` conversion as a
+  framework-default `400` before the handler runs, exactly as on the read-by-id
+  path.
+- **`existsById` + `deleteById` is two statements**, so there is a TOCTOU window:
+  a concurrent delete of the same id between the two calls makes `deleteById` a
+  no-op after `existsById` saw the row. Harmless here — the caller-visible outcome
+  (row gone, reported as removed) is unchanged — so it is left un-guarded rather
+  than wrapped in `@Transactional`, an idiom nothing else in this app uses.
+- **The `techStack` side table follows.** `deleteById` loads the entity and calls
+  `EntityManager.remove`, so Hibernate issues the `DELETE` on
+  `software_engineer_tech_stack` for that `software_engineer_id` before the parent
+  row — no orphaned tech rows. `SoftwareEngineerServiceIntegrationTest` verifies
+  both tables shrink against real Postgres.
+
 ## Still open
 
 In rough order of value:
@@ -192,11 +223,12 @@ In rough order of value:
 - **A response DTO** so the JPA entity isn't the API contract on the way out
   either (it already isn't on the way in — see "The write path").
 - **`@RestControllerAdvice` for error handling.** The 4xx bodies here are still
-  Spring's default shape: the validation/parse 400s on the write path, the
-  type-mismatch 400 and the `404` on the read-by-id path. `spring.web.error.include-stacktrace=never`
+  Spring's default shape: the validation/parse 400s on the write path, and the
+  type-mismatch 400 plus the `404` on both the read-by-id and delete paths.
+  `spring.web.error.include-stacktrace=never`
   already keeps the exception trace out of those bodies (devtools would otherwise
   force it on under `spring-boot:run`), but a single advice would give them a
-  deliberate, consistent shape (e.g. `ProblemDetail`) instead of four
+  deliberate, consistent shape (e.g. `ProblemDetail`) instead of the current
   framework-default variants.
 - **Flyway for schema management**, replacing `ddl-auto=update` (see "Schema by
   `ddl-auto=update`").

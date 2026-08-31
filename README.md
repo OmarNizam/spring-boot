@@ -93,6 +93,7 @@ Base URL: `http://localhost:8080`
 | `GET` | `/api/v1/software-engineers` | All software engineers | `200` — JSON array |
 | `GET` | `/api/v1/software-engineers/{id}` | One software engineer by id | `200` — JSON object; `404` if no such id; `400` if `{id}` is not a UUID |
 | `POST` | `/api/v1/software-engineers` | Create a software engineer | `201` — created entity, `Location` header; `400` on a validation failure |
+| `DELETE` | `/api/v1/software-engineers/{id}` | Delete a software engineer by id | `204` — no body; `404` if no such id; `400` if `{id}` is not a UUID |
 
 `requests.http` in the project root contains this call, runnable directly from
 IntelliJ's HTTP client.
