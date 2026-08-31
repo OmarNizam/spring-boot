@@ -161,9 +161,11 @@ All settings live in `src/main/resources/application.properties`.
 src/main/java/com/amigoscode/
 ├── Application.java                  # @SpringBootApplication entry point
 ├── SoftwareEngineer.java             # JPA entity (UUID id)
+├── CreateSoftwareEngineerRequest.java # POST request body (no id field) + validation
 ├── SoftwareEngineerRepository.java   # JpaRepository<SoftwareEngineer, UUID>
 ├── SoftwareEngineerService.java      # @Service — business logic between controller and repository
 ├── SoftwareEngineerController.java   # REST controller
+├── SoftwareEngineerNotFoundException.java # @ResponseStatus(404) — thrown on an unknown id
 └── DataSeeder.java                   # Seeds sample data when the table is empty
 
 compose.yaml                          # Postgres (+ app behind the "full" profile)

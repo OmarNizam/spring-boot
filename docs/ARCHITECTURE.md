@@ -169,14 +169,21 @@ These are inherited from the project template or the course exercises and are no
 ## The read-by-id path
 
 `GET /api/v1/software-engineers/{id}` goes through the same
-`Controller → Service → repository` seam. `{id}` binds to a `UUID`: a well-formed
-but unknown id is a `404` (the service returns `Optional.empty()`, the controller
-maps that to `ResponseEntity.notFound()`), and a non-UUID path segment fails
-Spring's type conversion as a framework-default `400` before the handler runs —
-same shape as the malformed-JSON case on the write path, and equally unshaped
-until a `@RestControllerAdvice` exists. HTTP-status decisions stay in the
-controller; the service exposes `Optional<SoftwareEngineer>`, mirroring how the
-create path keeps `ResponseEntity` construction out of the service.
+`Controller → Service → repository` seam. `{id}` binds to a `UUID`. The service
+exposes `Optional<SoftwareEngineer>`; the controller unwraps it with
+`orElseThrow(() -> new SoftwareEngineerNotFoundException(id))`, so a well-formed
+but unknown id is a `404`. That exception carries `@ResponseStatus(NOT_FOUND)`, so
+Spring's `ResponseStatusExceptionResolver` renders the status without a
+`@RestControllerAdvice` — and being a named type rather than a bare
+`ResponseStatusException`, it stays catchable once one is added. A non-UUID path
+segment fails Spring's type conversion as a framework-default `400` before the
+handler runs — same shape as the malformed-JSON case on the write path, and
+equally unshaped until an advice exists.
+
+Keeping the `Optional` in the service and the throw in the controller mirrors how
+the create path keeps `ResponseEntity` construction out of the service: the
+persistence seam reports "present or not", the web layer decides what that means
+over HTTP.
 
 ## Still open
 

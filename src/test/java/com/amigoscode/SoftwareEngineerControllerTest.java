@@ -83,7 +83,9 @@ class SoftwareEngineerControllerTest {
         given(softwareEngineerService.getSoftwareEngineerById(id)).willReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/software-engineers/{id}", id))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(SoftwareEngineerNotFoundException.class));
     }
 
     /**

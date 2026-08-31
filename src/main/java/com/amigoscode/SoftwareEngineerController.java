@@ -30,12 +30,12 @@ public class SoftwareEngineerController {
     }
 
     @GetMapping("{id}")
-    public ResponseEntity<SoftwareEngineer> getEngineerById(@PathVariable UUID id) {
-        // 404 on a well-formed but unknown id; a non-UUID path segment never gets
-        // here — Spring's type conversion fails it as a framework-default 400.
+    public SoftwareEngineer getEngineerById(@PathVariable UUID id) {
+        // Unknown id -> SoftwareEngineerNotFoundException, which carries
+        // @ResponseStatus(NOT_FOUND) so Spring renders a 404. A non-UUID path
+        // segment never gets here — type conversion fails it as a default 400.
         return softwareEngineerService.getSoftwareEngineerById(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new SoftwareEngineerNotFoundException(id));
     }
 
     @PostMapping
