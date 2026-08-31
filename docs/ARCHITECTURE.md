@@ -187,7 +187,18 @@ over HTTP.
 
 ## Still open
 
-In rough order of value: a response DTO so the JPA entity isn't the API
-contract on the way out either, `@RestControllerAdvice` for error handling (the 400s
-above are Spring's default shape), Flyway for schema management, and Testcontainers
-so tests provision their own database instead of depending on a running container.
+In rough order of value:
+
+- **A response DTO** so the JPA entity isn't the API contract on the way out
+  either (it already isn't on the way in — see "The write path").
+- **`@RestControllerAdvice` for error handling.** The 4xx bodies here are still
+  Spring's default shape: the validation/parse 400s on the write path, the
+  type-mismatch 400 and the `404` on the read-by-id path. `spring.web.error.include-stacktrace=never`
+  already keeps the exception trace out of those bodies (devtools would otherwise
+  force it on under `spring-boot:run`), but a single advice would give them a
+  deliberate, consistent shape (e.g. `ProblemDetail`) instead of four
+  framework-default variants.
+- **Flyway for schema management**, replacing `ddl-auto=update` (see "Schema by
+  `ddl-auto=update`").
+- **Testcontainers** so tests provision their own database instead of depending
+  on a running container on host port 5332.
