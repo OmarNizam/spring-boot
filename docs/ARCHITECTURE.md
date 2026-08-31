@@ -230,6 +230,9 @@ In rough order of value:
   force it on under `spring-boot:run`), but a single advice would give them a
   deliberate, consistent shape (e.g. `ProblemDetail`) instead of the current
   framework-default variants.
+- **Authentication / authorization.** Spring Security is not on the classpath, so
+  every endpoint is open. `DELETE /{id}` is the first one that destroys existing
+  rows rather than reading or appending, which raises the stakes of that gap.
 - **Flyway for schema management**, replacing `ddl-auto=update` (see "Schema by
   `ddl-auto=update`").
 - **Testcontainers** so tests provision their own database instead of depending
