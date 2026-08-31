@@ -160,14 +160,34 @@ These are inherited from the project template or the course exercises and are no
   one unauthenticated request can persist; 255 matches Hibernate's default
   `varchar` length. A violation is a 400 before the service is called.
 - **Responds `201 Created`** with the persisted entity so the caller learns the
-  generated `id`. No `Location` header — there is no GET-by-id endpoint to point it
-  at yet. IDEA Ultimate's taint analysis (`JvmTaintAnalysis`) flags the entity in
-  the response body as request-derived data reaching an XSS sink; it is suppressed
-  at the `return` with a comment — the `@RestController` serialises JSON, which is
-  not an HTML sink.
+  generated `id`, and a `Location` header pointing at `GET /api/v1/software-engineers/{id}`
+  (built from the current request URI). IDEA Ultimate's taint analysis
+  (`JvmTaintAnalysis`) flags the entity in the response body as request-derived
+  data reaching an XSS sink; it is suppressed at the `return` with a comment — the
+  `@RestController` serialises JSON, which is not an HTML sink.
 
-Still open, in rough order of value: a response DTO so the JPA entity isn't the API
-contract on the way out either, `@RestControllerAdvice` for error handling (the 400
-above is Spring's default shape), a GET-by-id endpoint (+ `Location` on create),
-Flyway for schema management, and Testcontainers so tests provision their own
-database instead of depending on a running container.
+## The read-by-id path
+
+`GET /api/v1/software-engineers/{id}` goes through the same
+`Controller → Service → repository` seam. `{id}` binds to a `UUID`. The service
+exposes `Optional<SoftwareEngineer>`; the controller unwraps it with
+`orElseThrow(() -> new SoftwareEngineerNotFoundException(id))`, so a well-formed
+but unknown id is a `404`. That exception carries `@ResponseStatus(NOT_FOUND)`, so
+Spring's `ResponseStatusExceptionResolver` renders the status without a
+`@RestControllerAdvice` — and being a named type rather than a bare
+`ResponseStatusException`, it stays catchable once one is added. A non-UUID path
+segment fails Spring's type conversion as a framework-default `400` before the
+handler runs — same shape as the malformed-JSON case on the write path, and
+equally unshaped until an advice exists.
+
+Keeping the `Optional` in the service and the throw in the controller mirrors how
+the create path keeps `ResponseEntity` construction out of the service: the
+persistence seam reports "present or not", the web layer decides what that means
+over HTTP.
+
+## Still open
+
+In rough order of value: a response DTO so the JPA entity isn't the API
+contract on the way out either, `@RestControllerAdvice` for error handling (the 400s
+above are Spring's default shape), Flyway for schema management, and Testcontainers
+so tests provision their own database instead of depending on a running container.

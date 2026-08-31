@@ -9,16 +9,19 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -59,6 +62,47 @@ class SoftwareEngineerControllerTest {
                 .andExpect(content().json("[]"));
     }
 
+    @Test
+    void getEngineerById_returnsEngineerAsJsonWhenFound() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.getSoftwareEngineerById(id)).willReturn(
+                Optional.of(new SoftwareEngineer(id, "James", List.of("java", "spring boot")))
+        );
+
+        mockMvc.perform(get("/api/v1/software-engineers/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.name").value("James"))
+                .andExpect(jsonPath("$.techStack", contains("java", "spring boot")));
+    }
+
+    @Test
+    void getEngineerById_returns404WhenServiceHasNoSuchEngineer() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.getSoftwareEngineerById(id)).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/software-engineers/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(SoftwareEngineerNotFoundException.class));
+    }
+
+    /**
+     * A non-UUID path segment fails Spring's {@code String}→{@code UUID} conversion as
+     * {@code MethodArgumentTypeMismatchException} before the handler runs — a different path
+     * from the 404 above. Pins the framework-default 400; there is no
+     * {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md "Still open").
+     * Rewrite to assert the chosen body once one exists.
+     */
+    @Test
+    void getEngineerById_rejectsNonUuidIdWith400() throws Exception {
+        mockMvc.perform(get("/api/v1/software-engineers/not-a-uuid"))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).getSoftwareEngineerById(any());
+    }
+
     /**
      * Pins that a service failure is <em>not</em> translated: there is no
      * {@code @RestControllerAdvice} (docs/ARCHITECTURE.md lists one as future work), so the
@@ -87,6 +131,7 @@ class SoftwareEngineerControllerTest {
                         .content("""
                                 {"name": "Anne", "techStack": ["java", "spring"]}"""))
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith("/api/v1/software-engineers/" + generated)))
                 .andExpect(jsonPath("$.id").value(generated.toString()))
                 .andExpect(jsonPath("$.name").value("Anne"))
                 .andExpect(jsonPath("$.techStack", contains("java", "spring")));

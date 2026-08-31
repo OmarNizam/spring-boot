@@ -4,7 +4,10 @@ GET  http://localhost:8080
 ### All software engineers
 GET http://localhost:8080/api/v1/software-engineers
 
-### Insert new software engineer (201 Created, body echoes the generated id)
+### One software engineer by id (404 if unknown, 400 if not a UUID)
+GET http://localhost:8080/api/v1/software-engineers/3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+### Insert new software engineer (201 Created, body echoes the generated id, Location header)
 POST http://localhost:8080/api/v1/software-engineers
 Content-Type: application/json
 

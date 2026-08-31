@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +45,25 @@ class SoftwareEngineerServiceTest {
 
         assertThat(softwareEngineerService.getAllSoftwareEngineers()).isEmpty();
         verify(softwareEngineerRepository).findAll();
+    }
+
+    @Test
+    void getSoftwareEngineerById_returnsRepositoryFindByIdResult() {
+        UUID id = UUID.randomUUID();
+        SoftwareEngineer engineer = new SoftwareEngineer(id, "James", List.of("java"));
+        given(softwareEngineerRepository.findById(id)).willReturn(Optional.of(engineer));
+
+        assertThat(softwareEngineerService.getSoftwareEngineerById(id)).contains(engineer);
+        verify(softwareEngineerRepository).findById(id);
+    }
+
+    @Test
+    void getSoftwareEngineerById_returnsEmptyWhenRepositoryHasNoSuchRow() {
+        UUID id = UUID.randomUUID();
+        given(softwareEngineerRepository.findById(id)).willReturn(Optional.empty());
+
+        assertThat(softwareEngineerService.getSoftwareEngineerById(id)).isEmpty();
+        verify(softwareEngineerRepository).findById(id);
     }
 
     @Test
