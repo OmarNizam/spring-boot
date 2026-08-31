@@ -12,19 +12,22 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the create path through the real service and Hibernate against the Postgres
- * container. Like {@link SoftwareEngineerRepositoryTest} this needs the database running
- * (host port 5332); {@code spring.docker.compose.skip.in-tests} is true so the suite will
- * not start it. {@code @Transactional} rolls each test back so the {@code DataSeeder} rows
- * stay untouched.
+ * Exercises the create and delete paths through the real service and Hibernate against
+ * the Postgres container. Like {@link SoftwareEngineerRepositoryTest} this needs the
+ * database running (host port 5332); {@code spring.docker.compose.skip.in-tests} is true
+ * so the suite will not start it. {@code @Transactional} rolls each test back so the
+ * {@code DataSeeder} rows stay untouched.
  *
  * <p>{@link SoftwareEngineerServiceTest} already pins the request-to-entity mapping against
- * a Mockito stub. This adds the piece that stub cannot show: docs/ARCHITECTURE.md
+ * a Mockito stub. This adds the pieces that stub cannot show: docs/ARCHITECTURE.md
  * "The write path" justifies the DTO design with "the service maps it to a fresh entity
  * with a {@code null} id, which forces the insert path" — that claim is verified here
  * end-to-end against a real persistence context (a new row appears and reloads intact),
  * not a mock. The persistence context is cleared between the insert and the reload so
  * {@code findById} issues a real SELECT rather than returning the managed instance.
+ * "The delete path" claims {@code deleteById} cascades to the
+ * {@code software_engineer_tech_stack} side table — verified here by counting both tables
+ * before and after against real Postgres.
  */
 @SpringBootTest
 @Transactional

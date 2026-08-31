@@ -257,12 +257,6 @@ class SoftwareEngineerControllerTest {
         verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
     }
 
-    /**
-     * A body Jackson cannot parse fails as {@code HttpMessageNotReadableException} — a
-     * different path from the bean-validation 400s above. Pins the framework-default 400;
-     * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md
-     * "The write path" / "Still open"). Rewrite to assert the chosen body once one exists.
-     */
     @Test
     void deleteEngineerById_returns204WhenServiceRemovedARow() throws Exception {
         UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
@@ -297,6 +291,12 @@ class SoftwareEngineerControllerTest {
         verify(softwareEngineerService, never()).deleteSoftwareEngineerById(any());
     }
 
+    /**
+     * A body Jackson cannot parse fails as {@code HttpMessageNotReadableException} — a
+     * different path from the bean-validation 400s above. Pins the framework-default 400;
+     * there is no {@code @RestControllerAdvice} shaping it yet (docs/ARCHITECTURE.md
+     * "The write path" / "Still open"). Rewrite to assert the chosen body once one exists.
+     */
     @Test
     void createSoftwareEngineer_rejectsMalformedJsonWith400() throws Exception {
         mockMvc.perform(post("/api/v1/software-engineers")
