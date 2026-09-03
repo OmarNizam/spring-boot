@@ -13,8 +13,10 @@ import java.util.List;
  * entity, for the same reason: it carries no {@code id}, so a client cannot use the body
  * to redirect the update onto a different row. The id comes only from the path variable;
  * the service loads that row and overwrites its {@code name}/{@code techStack}, so this
- * is a full replace (PUT semantics) rather than a partial merge — a field omitted from
- * the request clears the corresponding column rather than leaving it untouched.
+ * is a full replace (PUT semantics) rather than a partial merge — every request must
+ * supply both fields. There is no partial-update path where an omitted field is left
+ * untouched: {@code @NotBlank}/{@code @NotEmpty} below reject a missing field as a 400
+ * before the service runs, rather than silently clearing the corresponding column.
  *
  * <p>The {@code @Size} bounds mirror the create path for the same reason: the list cap
  * bounds how many rows land in {@code software_engineer_tech_stack}, and 255 matches
