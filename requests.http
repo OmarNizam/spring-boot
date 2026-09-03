@@ -16,5 +16,14 @@ Content-Type: application/json
   "techStack": ["java", "spring boot", "spring"]
 }
 
+### Update software engineer by id (200 OK, body echoes the updated entity; 404 if unknown, 400 if not a UUID or invalid)
+PUT http://localhost:8080/api/v1/software-engineers/3fa85f64-5717-4562-b3fc-2c963f66afa6
+Content-Type: application/json
+
+{
+  "name": "Anne Updated",
+  "techStack": ["java", "spring boot", "spring", "postgres"]
+}
+
 ### Delete software engineer by id (204 No Content; 404 if unknown, 400 if not a UUID)
 DELETE http://localhost:8080/api/v1/software-engineers/3fa85f64-5717-4562-b3fc-2c963f66afa6

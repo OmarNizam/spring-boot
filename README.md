@@ -93,6 +93,7 @@ Base URL: `http://localhost:8080`
 | `GET` | `/api/v1/software-engineers` | All software engineers | `200` — JSON array |
 | `GET` | `/api/v1/software-engineers/{id}` | One software engineer by id | `200` — JSON object; `404` if no such id; `400` if `{id}` is not a UUID |
 | `POST` | `/api/v1/software-engineers` | Create a software engineer | `201` — created entity, `Location` header; `400` on a validation failure |
+| `PUT` | `/api/v1/software-engineers/{id}` | Replace a software engineer's `name`/`techStack` by id | `200` — updated entity; `404` if no such id; `400` on a validation failure or if `{id}` is not a UUID |
 | `DELETE` | `/api/v1/software-engineers/{id}` | Delete a software engineer by id | `204` — no body; `404` if no such id; `400` if `{id}` is not a UUID |
 
 `requests.http` in the project root contains this call, runnable directly from
@@ -164,6 +165,7 @@ src/main/java/com/amigoscode/
 ├── Application.java                  # @SpringBootApplication entry point
 ├── SoftwareEngineer.java             # JPA entity (UUID id)
 ├── CreateSoftwareEngineerRequest.java # POST request body (no id field) + validation
+├── UpdateSoftwareEngineerRequest.java # PUT request body (no id field) + validation
 ├── SoftwareEngineerRepository.java   # JpaRepository<SoftwareEngineer, UUID>
 ├── SoftwareEngineerService.java      # @Service — business logic between controller and repository
 ├── SoftwareEngineerController.java   # REST controller

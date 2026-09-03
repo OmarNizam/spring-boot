@@ -12,7 +12,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the create and delete paths through the real service and Hibernate against
+ * Exercises the create, update, and delete paths through the real service and Hibernate against
  * the Postgres container. Like {@link SoftwareEngineerRepositoryTest} this needs the
  * database running (host port 5332); {@code spring.docker.compose.skip.in-tests} is true
  * so the suite will not start it. {@code @Transactional} rolls each test back so the
@@ -61,6 +61,41 @@ class SoftwareEngineerServiceIntegrationTest {
         SoftwareEngineer reloaded = softwareEngineerRepository.findById(id).orElseThrow();
         assertThat(reloaded.getName()).isEqualTo("Carla");
         assertThat(reloaded.getTechStack()).containsExactlyInAnyOrder("scala", "zio");
+    }
+
+    /**
+     * Verifies the update path merges onto the existing row rather than inserting a new one,
+     * and that a stale {@code techStack} is fully replaced — not appended to — in the
+     * {@code software_engineer_tech_stack} side table.
+     */
+    @Test
+    void updateSoftwareEngineerById_overwritesNameAndTechStackOfTheExistingRow() {
+        SoftwareEngineer created = softwareEngineerService.insertSoftwareEngineer(
+                new CreateSoftwareEngineerRequest("Elin", List.of("kotlin"))
+        );
+        softwareEngineerRepository.flush();
+        UUID id = created.getId();
+        long before = softwareEngineerRepository.count();
+
+        SoftwareEngineer updated = softwareEngineerService.updateSoftwareEngineerById(
+                id, new UpdateSoftwareEngineerRequest("Elin Updated", List.of("kotlin", "ktor"))
+        ).orElseThrow();
+        softwareEngineerRepository.flush();
+        entityManager.clear();
+
+        assertThat(updated.getId()).isEqualTo(id);
+        assertThat(softwareEngineerRepository.count()).isEqualTo(before);
+
+        SoftwareEngineer reloaded = softwareEngineerRepository.findById(id).orElseThrow();
+        assertThat(reloaded.getName()).isEqualTo("Elin Updated");
+        assertThat(reloaded.getTechStack()).containsExactlyInAnyOrder("kotlin", "ktor");
+    }
+
+    @Test
+    void updateSoftwareEngineerById_returnsEmptyWhenNoSuchRow() {
+        assertThat(softwareEngineerService.updateSoftwareEngineerById(
+                UUID.randomUUID(), new UpdateSoftwareEngineerRequest("Nobody", List.of("java"))
+        )).isEmpty();
     }
 
     /**
