@@ -207,6 +207,23 @@ controller turns that into HTTP.
   `save()` carries an `id` that already exists — the same class of
   insert-vs-merge hazard the create path's Javadoc describes, avoided by
   never constructing an entity with an unverified `id`.
+- **`techStack` is copied into a fresh `ArrayList`, not assigned directly
+  from the request.** `spring.jpa.open-in-view` is unset, so it defaults to
+  `true` (Boot logs a warning about this at startup) — the same
+  `EntityManager`/persistence context can stay bound across the whole
+  request, so the entity `findById` returns can still be the *managed*
+  instance when `save()` runs a few lines later. `JpaRepository.save()`
+  always calls `merge()` once an `id` is present, and merging an entity onto
+  itself takes Hibernate's `entityIsPersistent` fast path, which reconciles
+  each collection property by calling `clear()` on it before re-adding
+  elements. Handing `save()` the request's own `List` (bound via the record
+  accessor to whatever the caller/Jackson produced — effectively immutable
+  in practice) means that `clear()` lands on that list and throws
+  `UnsupportedOperationException`. Copying into a mutable `ArrayList` before
+  the assignment sidesteps it regardless of which merge path Hibernate
+  takes. `SoftwareEngineerServiceIntegrationTest` pins this against real
+  Postgres with `@Transactional`, which keeps the loaded entity managed for
+  the rest of the test the same way `open-in-view` does for a request.
 - **The service returns `Optional<SoftwareEngineer>`**, empty when no row
   has that id, mirroring the read-by-id path's `Optional` rather than the
   delete path's `boolean` — the controller has a real entity to hand back on
