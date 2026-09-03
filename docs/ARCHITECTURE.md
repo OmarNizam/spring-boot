@@ -185,6 +185,44 @@ the create path keeps `ResponseEntity` construction out of the service: the
 persistence seam reports "present or not", the web layer decides what that means
 over HTTP.
 
+## The update path
+
+`PUT /api/v1/software-engineers/{id}` goes through the same
+`Controller → Service → repository` seam, and follows the read-by-id/delete
+split: the service reports what happened to the persistence layer, the
+controller turns that into HTTP.
+
+- **The request body is `UpdateSoftwareEngineerRequest`, not the entity** —
+  same reasoning as the create path's `CreateSoftwareEngineerRequest`: it
+  carries no `id`, so a client cannot use the body to redirect the update
+  onto a different row. The `id` comes only from the path variable.
+- **The service loads the row first, then mutates and saves it**
+  (`SoftwareEngineerService.updateSoftwareEngineerById`): `findById` returns
+  the managed/detached entity for that `id`, `setName`/`setTechStack`
+  overwrite its fields, and `save()` merges those changes back — this is a
+  full replace, not a partial patch, so an omitted field in the request body
+  is validation-rejected rather than silently leaving the old value (see
+  "Input is validated" below). Loading first, rather than building a fresh
+  entity with the path `id` set on it, guarantees the entity handed to
+  `save()` carries an `id` that already exists — the same class of
+  insert-vs-merge hazard the create path's Javadoc describes, avoided by
+  never constructing an entity with an unverified `id`.
+- **The service returns `Optional<SoftwareEngineer>`**, empty when no row
+  has that id, mirroring the read-by-id path's `Optional` rather than the
+  delete path's `boolean` — the controller has a real entity to hand back on
+  success, so `Optional` fits the same "presence" question with less
+  information loss.
+- **Input is validated** (`@Valid` on the parameter): same shape and bounds
+  as `CreateSoftwareEngineerRequest` — `name` `@NotBlank @Size(max = 255)`,
+  `techStack` `@NotEmpty` (`@Size(max = 50)`) of `@NotBlank @Size(max =
+  255)`. A violation is a 400 before the service is called.
+- **The controller maps empty to a `404`** via the existing
+  `SoftwareEngineerNotFoundException` — same 404 type and mechanism as the
+  read-by-id and delete paths — and responds **`200 OK`** with the updated
+  entity on success. A non-UUID path segment fails Spring's `String`→`UUID`
+  conversion as a framework-default `400` before the handler runs, exactly
+  as on the read-by-id and delete paths.
+
 ## The delete path
 
 `DELETE /api/v1/software-engineers/{id}` goes through the same

@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,6 +57,15 @@ public class SoftwareEngineerController {
         // as markup.
         //noinspection JvmTaintAnalysis
         return ResponseEntity.created(location).body(created);
+    }
+
+    @PutMapping("{id}")
+    public SoftwareEngineer updateEngineerById(
+            @PathVariable UUID id, @Valid @RequestBody UpdateSoftwareEngineerRequest request) {
+        // Unknown id -> 404, same seam as the read-by-id and delete paths. A non-UUID path
+        // segment fails type conversion as a default 400 before we get here.
+        return softwareEngineerService.updateSoftwareEngineerById(id, request)
+                .orElseThrow(() -> new SoftwareEngineerNotFoundException(id));
     }
 
     @DeleteMapping("{id}")

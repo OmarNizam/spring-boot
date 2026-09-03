@@ -87,6 +87,36 @@ class SoftwareEngineerServiceTest {
     }
 
     @Test
+    void updateSoftwareEngineerById_overwritesFieldsOnTheLoadedEntityAndReturnsSaved() {
+        UUID id = UUID.randomUUID();
+        SoftwareEngineer existing = new SoftwareEngineer(id, "Anne", List.of("java"));
+        UpdateSoftwareEngineerRequest request =
+                new UpdateSoftwareEngineerRequest("Anne Updated", List.of("java", "spring"));
+        given(softwareEngineerRepository.findById(id)).willReturn(Optional.of(existing));
+        given(softwareEngineerRepository.save(existing)).willReturn(existing);
+
+        Optional<SoftwareEngineer> result = softwareEngineerService.updateSoftwareEngineerById(id, request);
+
+        assertThat(result).contains(existing);
+        ArgumentCaptor<SoftwareEngineer> captor = ArgumentCaptor.forClass(SoftwareEngineer.class);
+        verify(softwareEngineerRepository).save(captor.capture());
+        // id is preserved from the loaded entity, not taken from the request (which has none).
+        assertThat(captor.getValue().getId()).isEqualTo(id);
+        assertThat(captor.getValue().getName()).isEqualTo("Anne Updated");
+        assertThat(captor.getValue().getTechStack()).containsExactly("java", "spring");
+    }
+
+    @Test
+    void updateSoftwareEngineerById_returnsEmptyAndDoesNotSaveWhenNoSuchRow() {
+        UUID id = UUID.randomUUID();
+        UpdateSoftwareEngineerRequest request = new UpdateSoftwareEngineerRequest("Anne", List.of("java"));
+        given(softwareEngineerRepository.findById(id)).willReturn(Optional.empty());
+
+        assertThat(softwareEngineerService.updateSoftwareEngineerById(id, request)).isEmpty();
+        verify(softwareEngineerRepository, never()).save(any());
+    }
+
+    @Test
     void deleteSoftwareEngineerById_deletesAndReturnsTrueWhenRowExists() {
         UUID id = UUID.randomUUID();
         given(softwareEngineerRepository.existsById(id)).willReturn(true);

@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -255,6 +257,106 @@ class SoftwareEngineerControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(softwareEngineerService, never()).insertSoftwareEngineer(any());
+    }
+
+    @Test
+    void updateEngineerById_returnsUpdatedEngineerAsJsonWhenFound() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.updateSoftwareEngineerById(any(), any())).willReturn(
+                Optional.of(new SoftwareEngineer(id, "Anne Updated", List.of("java", "spring")))
+        );
+
+        mockMvc.perform(put("/api/v1/software-engineers/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne Updated", "techStack": ["java", "spring"]}"""))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.name").value("Anne Updated"))
+                .andExpect(jsonPath("$.techStack", contains("java", "spring")));
+
+        ArgumentCaptor<UpdateSoftwareEngineerRequest> captor =
+                ArgumentCaptor.forClass(UpdateSoftwareEngineerRequest.class);
+        verify(softwareEngineerService).updateSoftwareEngineerById(eq(id), captor.capture());
+        assertThat(captor.getValue().name()).isEqualTo("Anne Updated");
+        assertThat(captor.getValue().techStack()).containsExactly("java", "spring");
+    }
+
+    @Test
+    void updateEngineerById_returns404WhenServiceHasNoSuchEngineer() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.updateSoftwareEngineerById(any(), any())).willReturn(Optional.empty());
+
+        mockMvc.perform(put("/api/v1/software-engineers/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": ["java"]}"""))
+                .andExpect(status().isNotFound())
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(SoftwareEngineerNotFoundException.class));
+    }
+
+    /**
+     * A non-UUID path segment fails Spring's {@code String}→{@code UUID} conversion as a
+     * framework-default 400 before the handler runs — same path as the GET/DELETE-by-id cases.
+     */
+    @Test
+    void updateEngineerById_rejectsNonUuidIdWith400() throws Exception {
+        mockMvc.perform(put("/api/v1/software-engineers/not-a-uuid")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": ["java"]}"""))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).updateSoftwareEngineerById(any(), any());
+    }
+
+    @Test
+    void updateEngineerById_rejectsBlankNameWith400() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+
+        mockMvc.perform(put("/api/v1/software-engineers/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "  ", "techStack": ["java"]}"""))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).updateSoftwareEngineerById(any(), any());
+    }
+
+    @Test
+    void updateEngineerById_rejectsEmptyTechStackWith400() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+
+        mockMvc.perform(put("/api/v1/software-engineers/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Anne", "techStack": []}"""))
+                .andExpect(status().isBadRequest());
+
+        verify(softwareEngineerService, never()).updateSoftwareEngineerById(any(), any());
+    }
+
+    /**
+     * The update body binds to {@link UpdateSoftwareEngineerRequest}, which has no {@code id}
+     * field, so a client-supplied {@code id} cannot redirect the update onto a different row;
+     * the path variable is the only source of the id. Jackson drops the unknown property.
+     */
+    @Test
+    void updateEngineerById_ignoresClientSuppliedId() throws Exception {
+        UUID id = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        given(softwareEngineerService.updateSoftwareEngineerById(any(), any())).willReturn(
+                Optional.of(new SoftwareEngineer(id, "Anne", List.of("java")))
+        );
+
+        mockMvc.perform(put("/api/v1/software-engineers/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"id": "11111111-1111-1111-1111-111111111111", "name": "Anne", "techStack": ["java"]}"""))
+                .andExpect(status().isOk());
+
+        verify(softwareEngineerService).updateSoftwareEngineerById(eq(id), any());
     }
 
     @Test
