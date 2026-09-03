@@ -2,8 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A small Spring Boot 4 + PostgreSQL REST API (list, get-by-id, and create endpoints) built from the
-Amigoscode course. `README.md` covers running it; `docs/ARCHITECTURE.md` covers
+A small Spring Boot 4 + PostgreSQL REST API (list, get-by-id, and create endpoints).
+`README.md` covers running it; `docs/ARCHITECTURE.md` covers
 *why* it is wired the way it is and the non-obvious behaviour — read it before
 changing the persistence layer, the compose setup, or the seeder.
 
