@@ -223,4 +223,6 @@ re-create the run configuration from the gutter arrow next to `main()`.
 
 ## License
 
-No license specified.
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Copyright 2026 Omar Nizam and SyncMind Digital.
