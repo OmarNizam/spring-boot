@@ -2,6 +2,7 @@ package com.amigoscode;
 
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +42,16 @@ public class SoftwareEngineerService {
         return softwareEngineerRepository.findById(id)
                 .map(engineer -> {
                     engineer.setName(request.name());
-                    engineer.setTechStack(request.techStack());
+                    // Copy into a plain ArrayList rather than handing Hibernate the request's
+                    // (validation-only, incidentally immutable) List straight from the DTO.
+                    // With open-in-view (Boot's default here) the loaded entity can still be
+                    // the managed instance when save() runs; JpaRepository.save() always calls
+                    // merge() for a non-null id, and merging a managed entity onto itself makes
+                    // Hibernate clear() the techStack collection in place before re-adding its
+                    // elements. Handing it request.techStack() directly means the collection
+                    // Hibernate is asked to clear() *is* that immutable List, which throws
+                    // UnsupportedOperationException.
+                    engineer.setTechStack(new ArrayList<>(request.techStack()));
                     return softwareEngineerRepository.save(engineer);
                 });
     }
