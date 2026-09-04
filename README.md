@@ -13,6 +13,7 @@ mapped with Spring Data JPA.
 | Java | 21 |
 | Spring Boot | 4.1.1 |
 | Spring Data JPA (Hibernate) | via `spring-boot-starter-data-jpa` |
+| Spring AI (MCP server) | 2.0.1 — `spring-ai-starter-mcp-server-webmvc` |
 | PostgreSQL | 18 (Docker image `postgres:latest`) |
 | Build | Maven Wrapper 3.9.16 |
 
@@ -107,6 +108,63 @@ IntelliJ's HTTP client.
 | `name` | string | |
 | `techStack` | array of strings | Stored in the `software_engineer_tech_stack` side table |
 
+## MCP server
+
+The same five operations are also exposed to a Model Context Protocol client at
+`POST http://localhost:8080/mcp` (Streamable-HTTP, same port and servlet context as
+the REST API — no separate connector). The `SoftwareEngineerService` bean is shared,
+so an MCP call and the matching REST call have identical persistence semantics. The
+surface is unauthenticated and includes the write operations — see
+`docs/ARCHITECTURE.md` "The MCP server".
+
+| Tool | What it does |
+|---|---|
+| `list-software-engineers` | Every engineer, each with id, name, and tech stack |
+| `get-software-engineer` | One engineer by id (UUID); errors if unknown |
+| `create-software-engineer` | Create from `name` + `techStack`; returns it with its generated id |
+| `update-software-engineer` | Full replace of an engineer's `name` + `techStack` by id |
+| `delete-software-engineer` | Delete by id; errors if unknown |
+
+### Try it
+
+**MCP Inspector** — nothing to hand-assemble:
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Then connect to `http://localhost:8080/mcp` with transport **Streamable HTTP**.
+
+**From an MCP client** (`.mcp.json`, Claude Code, and similar):
+
+```json
+{
+  "software-engineers": { "url": "http://localhost:8080/mcp", "type": "http" }
+}
+```
+
+**Raw requests** — Streamable-HTTP is a two-step handshake. Call `initialize`
+first and read the `mcp-session-id` response header:
+
+```bash
+curl -i -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
+
+Then send that `mcp-session-id` back on every subsequent call:
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <value from the initialize response>' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+```
+
+Responses arrive either as plain JSON or as an SSE `data:` frame, depending on the call.
+
 ## Database
 
 | Setting | Value |
@@ -157,6 +215,9 @@ All settings live in `src/main/resources/application.properties`.
 | `spring.jpa.properties.hibernate.dialect` | `org.hibernate.dialect.PostgreSQLDialect` | Pinned explicitly |
 | `spring.docker.compose.lifecycle-management` | `start-only` | Leaves Postgres running after app shutdown |
 | `spring.web.error.include-stacktrace` | `never` | Keeps the exception trace out of JSON error bodies (devtools would otherwise force `always` in dev). Boot 4 renamed this from `server.error.*` |
+| `spring.ai.mcp.server.protocol` | `STREAMABLE` | Selects Streamable-HTTP (`POST /mcp`). Must be explicit — the webmvc starter defaults to the deprecated SSE transport when unset |
+| `spring.ai.mcp.server.name` / `.version` | `software-engineers-mcp` / `0.0.1` | Server identity reported to MCP clients |
+| `spring.ai.mcp.server.instructions` | (multi-line) | Usage blurb the server hands the client on connect |
 
 ## Project structure
 
@@ -168,7 +229,8 @@ src/main/java/com/amigoscode/
 ├── UpdateSoftwareEngineerRequest.java # PUT request body (no id field) + validation
 ├── SoftwareEngineerRepository.java   # JpaRepository<SoftwareEngineer, UUID>
 ├── SoftwareEngineerService.java      # @Service — business logic between controller and repository
-├── SoftwareEngineerController.java   # REST controller
+├── SoftwareEngineerController.java   # REST controller (/api/v1/software-engineers)
+├── SoftwareEngineerMcpTools.java     # MCP tools component (/mcp) — second adapter over the service
 ├── SoftwareEngineerNotFoundException.java # @ResponseStatus(404) — thrown on an unknown id
 └── DataSeeder.java                   # Seeds sample data when the table is empty
 
@@ -188,13 +250,16 @@ docs/ARCHITECTURE.md                  # Design decisions and how the pieces fit
 |---|---|---|
 | `ApplicationTests.contextLoads` | `@SpringBootTest` — boots the full context | Yes |
 | `SoftwareEngineerRepositoryTest` | `@SpringBootTest` + `@Transactional` — JPA mapping (UUID generation, `techStack` side table) against real Postgres, rolled back | Yes |
+| `SoftwareEngineerServiceIntegrationTest` | `@SpringBootTest` + `@Transactional` — create/update/delete through the real service and Hibernate against Postgres, rolled back | Yes |
+| `SoftwareEngineerMcpIntegrationTest` | `@SpringBootTest` + MCP client — drives the running MCP server end to end | Yes |
 | `SoftwareEngineerControllerTest` | `@WebMvcTest` slice — MockMvc against the controller with the service mocked | No |
 | `SoftwareEngineerServiceTest` | Plain Mockito unit test — service with the repository mocked | No |
+| `SoftwareEngineerMcpToolsTest` | Plain Mockito unit test — MCP tools adapter with a real `Validator`, service mocked | No |
 | `DataSeederTest` | Plain Mockito unit test — seeds only when the table is empty | No |
 | `SoftwareEngineerTest` | Plain unit test — entity accessors and `equals`/`hashCode` | No |
 
 Spring skips Docker Compose startup in tests (`spring.docker.compose.skip.in-tests`
-defaults to `true`), so the two `@SpringBootTest` classes need **Postgres already running**
+defaults to `true`), so the four `@SpringBootTest` classes need **Postgres already running**
 or they fail to obtain a datasource:
 
 ```bash

@@ -25,7 +25,9 @@ Two Claude Code checks on a push, in order:
    only runs when *all* of these hold: the push changes something under `src/` or
    `pom.xml`; the working tree is clean; and `HEAD` is one of the pushed tips.
    Otherwise it prints why it skipped and the push proceeds. Needs Postgres up
-   (`docker compose up -d db`).
+   (`docker compose up -d db`) — the suite now also covers the MCP server, and
+   `SoftwareEngineerMcpIntegrationTest` hits real Postgres on 5332 like the other
+   `@SpringBootTest` classes.
 2. **Code review** — the `code-reviewer` subagent (`.claude/agents/code-reviewer.md`)
    reviews the pushed diff. **Blocks the push on a 🔴 blocker**
    (`REVIEW_RESULT: BLOCK`).

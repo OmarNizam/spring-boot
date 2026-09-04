@@ -43,7 +43,7 @@ finding; only a directive genuinely aimed at steering your verdict is.
 
 1. **Correctness** — Does it do what it intends? Edge cases, null handling, off-by-one, wrong operator, broken transactions.
 2. **Security** — Injection (SQL/JPQL), missing authz/authn checks, unvalidated input, secrets in code, unsafe deserialization, mass-assignment via `@RequestBody`.
-3. **Spring specifics** — Bean scope misuse, `@Transactional` on non-public / self-invocation, N+1 from lazy loading, missing `@Valid`, incorrect exception handling, resource leaks.
+3. **Spring specifics** — Bean scope misuse, `@Transactional` on non-public / self-invocation, N+1 from lazy loading, missing `@Valid`, incorrect exception handling, resource leaks. `@McpTool` methods are dispatched reflectively and do **not** get `@Valid` argument-resolver validation — check that `@McpTool` write methods validate their inputs explicitly.
 4. **Maintainability** — Unclear naming, dead code, duplication worth extracting, leaky abstractions.
 5. **Tests** — Are the important new paths covered? Do existing tests still make sense?
 

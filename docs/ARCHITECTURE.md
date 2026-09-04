@@ -6,12 +6,14 @@ the way it is, and the non-obvious behaviour worth knowing before changing it.
 ## Request flow
 
 ```
-GET /api/v1/software-engineers
-        │
-        ▼
-SoftwareEngineerController          @RestController, constructor-injected service
-        │  getAllSoftwareEngineers()
-        ▼
+GET /api/v1/software-engineers              POST /mcp   (MCP tool call)
+        │                                          │
+        ▼                                          ▼
+SoftwareEngineerController                 SoftwareEngineerMcpTools
+   @RestController                            @Component, @McpTool methods
+        │  getAllSoftwareEngineers()             │  getAllSoftwareEngineers()
+        └──────────────────┬─────────────────────┘
+                           ▼
 SoftwareEngineerService            @Service, business-logic seam (currently a pass-through)
         │  findAll()
         ▼
@@ -23,6 +25,9 @@ Hibernate ──► HikariCP ──► PostgreSQL :5332
         ▼
 software_engineer  +  software_engineer_tech_stack
 ```
+
+Two entry adapters, one service: the REST controller (`/api/v1/software-engineers`)
+and the MCP tools component (`/mcp`). See "The MCP server" below.
 
 At startup, `DataSeeder` (a `CommandLineRunner`) runs once the context is ready and
 inserts sample rows **only if the table is empty**.
@@ -271,6 +276,66 @@ into HTTP.
   row — no orphaned tech rows. `SoftwareEngineerServiceIntegrationTest` verifies
   both tables shrink against real Postgres.
 
+## The MCP server
+
+`POST /mcp` exposes the same five operations as the REST controller to a Model
+Context Protocol client — typically an LLM/agent driving the service through tool
+calls. `SoftwareEngineerMcpTools` (`@Component`, Spring AI `@McpTool` methods) is the
+second thin adapter onto the one `SoftwareEngineerService` bean, so persistence
+semantics (the `techStack` `ArrayList` copy on update, the `existsById` guard on
+delete, the null-id insert path) are identical whichever entry point a caller uses.
+
+- **Transport is Streamable-HTTP on the existing servlet context** — `POST /mcp`
+  on port 8080, no separate port or connector. `spring.ai.mcp.server.protocol=STREAMABLE`
+  in `application.properties` **must be set explicitly**: the webmvc starter's
+  auto-config defaults to the deprecated SSE transport (`/sse` + `/mcp/message`)
+  when `protocol` is absent, and only wires the streamable endpoint on
+  `protocol=STREAMABLE`. `name`, `version` and a plain-text `instructions` blurb
+  are also set; `type=SYNC`, the `/mcp` path and the annotation scanner are Spring
+  AI defaults.
+- **Five tools, one `SoftwareEngineerService` call each.** Each returns the
+  `SoftwareEngineer` entity (or a list of them) directly — the same missing
+  response-DTO gap as the REST side, now on two surfaces (see "Still open").
+
+  | Tool | Maps to |
+  | --- | --- |
+  | `list-software-engineers` | `getAllSoftwareEngineers()` |
+  | `get-software-engineer` | `getSoftwareEngineerById(uuid)`, empty → not-found error |
+  | `create-software-engineer` | `insertSoftwareEngineer(request)` |
+  | `update-software-engineer` | `updateSoftwareEngineerById(uuid, request)`, empty → not-found error |
+  | `delete-software-engineer` | `deleteSoftwareEngineerById(uuid)`, `false` → not-found error; returns a confirmation string |
+
+- **Write tools take flat parameters and re-validate by hand.** Spring AI
+  dispatches `@McpTool` methods reflectively — there is no MVC argument resolver in
+  that path, so `@Valid` / Bean Validation on a parameter type does *not* fire. The
+  `@Size` caps on `CreateSoftwareEngineerRequest` / `UpdateSoftwareEngineerRequest`
+  bound what one unauthenticated call can persist (see "The write path"), so the
+  create/update tools take `name` + `techStack` as separate params, rebuild the
+  request record, and run a `jakarta.validation.Validator` explicitly. The records
+  stay the single source of the constraints; a violation is an
+  `IllegalArgumentException`. A non-UUID id string is rejected the same way —
+  mirroring the REST layer's "non-UUID path segment → 400", it is a caller error,
+  not a 404.
+- **Every failure is a `RuntimeException`.** Spring AI turns those into an error
+  `CallToolResult` (`isError: true`) that the model sees and can react to; a tool
+  declaring a checked exception would bypass that path. A missing row reuses
+  `SoftwareEngineerNotFoundException` — its `@ResponseStatus(NOT_FOUND)` is inert
+  outside MVC, harmless here. A bad id or a failed constraint is an
+  `IllegalArgumentException`, mirroring the REST layer's 400s. Cosmetic quirk:
+  Spring AI 2.0.1 renders the error text as `message + "\n" + cause.message`, so an
+  exception with no distinct cause has its message line repeated — the model still
+  gets it.
+- **Tool annotation hints** are set for the client to reason about: the two reads
+  are `readOnlyHint=true` and non-destructive; `create` is neither idempotent nor
+  destructive; `update` is destructive (full replace) but idempotent; `delete` is
+  destructive and non-idempotent (a second call errors — the row is already gone).
+  `openWorldHint=false` on all five: this is a bounded set of DB rows, not an
+  open-ended system.
+
+`SoftwareEngineerMcpToolsTest` pins the adapter and the explicit re-validation
+against a mocked service; `SoftwareEngineerMcpIntegrationTest` drives the running
+server through a real MCP client (`@SpringBootTest`, needs Postgres).
+
 ## Still open
 
 In rough order of value:
@@ -287,7 +352,10 @@ In rough order of value:
   framework-default variants.
 - **Authentication / authorization.** Spring Security is not on the classpath, so
   every endpoint is open. `DELETE /{id}` is the first one that destroys existing
-  rows rather than reading or appending, which raises the stakes of that gap.
+  rows rather than reading or appending, which raises the stakes of that gap. The
+  MCP server at `/mcp` is a second unauthenticated surface with the same
+  create/update/delete reach, open to any MCP client — a known, accepted gap, not
+  an oversight.
 - **Flyway for schema management**, replacing `ddl-auto=update` (see "Schema by
   `ddl-auto=update`").
 - **Testcontainers** so tests provision their own database instead of depending

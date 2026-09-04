@@ -36,6 +36,7 @@
     <properties>
         <java.version>21</java.version>
         <spring-modulith.version>2.1.0</spring-modulith.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
     <dependencies>
 
@@ -89,6 +90,22 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- MCP server layer: exposes SoftwareEngineerService over the Model Context
+             Protocol on the same servlet context as the REST API (see docs/ARCHITECTURE.md).
+             Excludes spring-boot-starter-web (the deprecated pre-Boot-4 alias the starter
+             still declares) — this project supplies MVC + Tomcat via spring-boot-starter-webmvc,
+             and CLAUDE.md's Boot-4 table pins that choice. The MCP Java SDK client used by
+             SoftwareEngineerMcpIntegrationTest comes in transitively as mcp-core. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
 
     </dependencies>
     <dependencyManagement>
@@ -97,6 +114,13 @@
                 <groupId>org.springframework.modulith</groupId>
                 <artifactId>spring-modulith-bom</artifactId>
                 <version>${spring-modulith.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
