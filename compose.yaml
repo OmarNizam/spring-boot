@@ -1,21 +1,36 @@
 services:
   app:
-    # Only started with: docker compose --profile full up
-    # Keeps Boot's docker-compose support from rebuilding this image on every IDE run.
-    profiles: ["full"]
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spring-boot-app
+    ports:
+      - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/postgres-spring-boot
       SPRING_DATASOURCE_USERNAME: amigoscode
       SPRING_DATASOURCE_PASSWORD: password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - spring-boot_db
-    depends_on:
-      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "netstat -an | grep 8080 || nc -z localhost 8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    profiles:
+      - full
 
   db:
+    image: postgres:17-alpine
     container_name: postgres-spring-boot
-    image: postgres:latest
     environment:
       POSTGRES_DB: postgres-spring-boot
       POSTGRES_USER: amigoscode
@@ -28,6 +43,11 @@ services:
     networks:
       - spring-boot_db
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amigoscode"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   spring-boot_db:
@@ -35,3 +55,4 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
