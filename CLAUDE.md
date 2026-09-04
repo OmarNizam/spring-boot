@@ -139,6 +139,10 @@ Bypass: `SKIP_TESTS=1`, `SKIP_CODE_REVIEW=1`, or `git push --no-verify`.
 Subagent definitions live in `.claude/agents/`. When changing behaviour that the
 hook or the agents describe, update the agent `.md` and `.githooks/README.md` too.
 
+`.claude/agents/` also holds `integration-tester` — a manually-invoked helper for
+writing and running `@SpringBootTest` integration tests (real Postgres, real HTTP,
+the MCP server). It is not part of the pre-push hook.
+
 ## CI
 
 `.github/workflows/ci.yml` runs `./mvnw -B verify` on every push to `main` and
