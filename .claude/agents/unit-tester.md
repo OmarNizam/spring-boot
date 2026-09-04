@@ -65,12 +65,16 @@ branch %) and call out which gaps are real and which are noise.
 
 - **Unit tests:** `@ExtendWith(MockitoExtension.class)`, `@Mock` + `@InjectMocks`,
   AssertJ (`assertThat`), BDDMockito `given(...).willReturn(...)` / `verify(...)`.
-  See `SoftwareEngineerServiceTest`, `DataSeederTest`.
+  See `SoftwareEngineerServiceTest`, `DataSeederTest`, `SoftwareEngineerMcpToolsTest`
+  (the last builds a real Bean Validation `Validator` because the MCP tools
+  re-validate by hand — see `docs/ARCHITECTURE.md` "The MCP server").
 - **Controller slices:** `@WebMvcTest(TheController.class)`, `@MockitoBean` the service,
   Hamcrest matchers with `jsonPath`, `MockMvcRequestBuilders.get(...)`.
   See `SoftwareEngineerControllerTest`.
-- **JPA tests:** `@SpringBootTest` + `@Transactional` for rollback. See
-  `SoftwareEngineerRepositoryTest`.
+- **`@SpringBootTest` integration:** `@Transactional` for rollback where it writes.
+  See `SoftwareEngineerRepositoryTest` and `SoftwareEngineerServiceIntegrationTest`
+  (JPA), and `SoftwareEngineerMcpIntegrationTest` (drives the running MCP server
+  through a real MCP client). All need Postgres on 5332.
 - **Test names:** `methodUnderTest_expectedBehaviour` (e.g.
   `getAllSoftwareEngineers_returnsEmptyListWhenRepositoryIsEmpty`).
 - **Pin, don't endorse.** When a test locks in behaviour that is questionable —
