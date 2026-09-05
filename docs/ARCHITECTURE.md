@@ -5,6 +5,13 @@ the way it is, and the non-obvious behaviour worth knowing before changing it.
 
 ## Request flow
 
+Under `docker compose --profile full`, an Nginx reverse proxy terminates HTTPS
+and sits in front of everything below — see "HTTPS / TLS termination" further
+down. The diagram starts at the servlet layer; `./mvnw spring-boot:run` and
+the plain jar reach it directly over plain HTTP instead. The `:5332` in the
+diagram is that path's own host-mapped port — inside the `full` stack the app
+reaches Postgres at `db:5432` instead (see "Host port 5332, not 5432" below).
+
 ```
 GET /api/v1/software-engineers              POST /mcp   (MCP tool call)
         │                                          │

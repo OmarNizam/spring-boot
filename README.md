@@ -1,6 +1,7 @@
 # Software Engineers API
 
-A small Spring Boot REST API backed by PostgreSQL running in Docker Compose.
+A small Spring Boot REST API backed by PostgreSQL running in Docker Compose, with
+an Nginx reverse proxy enforcing HTTPS when run via the full Docker Compose stack.
 Built while following the Amigoscode Spring Boot course.
 
 `GET /api/v1/software-engineers` returns software engineers stored in Postgres,
@@ -15,6 +16,7 @@ mapped with Spring Data JPA.
 | Spring Data JPA (Hibernate) | via `spring-boot-starter-data-jpa` |
 | Spring AI (MCP server) | 2.0.1 — `spring-ai-starter-mcp-server-webmvc` |
 | PostgreSQL | 18 (Docker image `postgres:latest`) |
+| Nginx (reverse proxy, HTTPS) | 1.27-alpine — full Docker Compose profile only |
 | Build | Maven Wrapper 3.9.16 |
 
 ## Prerequisites
