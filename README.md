@@ -78,12 +78,29 @@ Docker Compose support is deliberately excluded from the repackaged jar by
 ### Option 3 — everything in Docker
 
 ```bash
+./docker/nginx/generate-certs.sh   # once per clone — self-signed cert, gitignored
 docker compose --profile full up --build
 ```
 
 The `app` service sits behind the `full` compose profile. Without that flag,
 `docker compose up` starts only the database — which is what you want during development,
 so the app image isn't rebuilt on every run.
+
+This is also the only mode where HTTPS is enforced: an `nginx` reverse proxy
+terminates TLS on `https://localhost` (port 443) using the cert generated
+above, redirects any plain `http://localhost` request to HTTPS (`308`), and
+is the *only* way in — `app`'s container port is no longer published to the
+host, so it can't be reached directly. Since the cert is self-signed, `curl`
+needs `-k` and browsers/API clients need to accept the certificate warning
+once:
+
+```bash
+curl -sk https://localhost/api/v1/software-engineers | jq
+```
+
+The `http://localhost:8080` URLs elsewhere in this README are for Options 1
+and 2 (local `spring-boot:run` / jar), which remain plain HTTP — nginx only
+exists inside the `full` Compose stack.
 
 ## API
 
@@ -133,7 +150,11 @@ surface is unauthenticated and includes the write operations — see
 npx @modelcontextprotocol/inspector
 ```
 
-Then connect to `http://localhost:8080/mcp` with transport **Streamable HTTP**.
+Then connect to `http://localhost:8080/mcp` with transport **Streamable HTTP**
+(or `https://localhost/mcp` when running Option 3 — MCP Inspector is
+browser-based, so accept the self-signed certificate warning by opening
+`https://localhost/mcp` directly in the browser first, or configure the
+client to ignore TLS errors).
 
 **From an MCP client** (`.mcp.json`, Claude Code, and similar):
 
@@ -234,8 +255,10 @@ src/main/java/com/amigoscode/
 ├── SoftwareEngineerNotFoundException.java # @ResponseStatus(404) — thrown on an unknown id
 └── DataSeeder.java                   # Seeds sample data when the table is empty
 
-compose.yaml                          # Postgres (+ app behind the "full" profile)
+compose.yaml                          # Postgres (+ app and nginx behind the "full" profile)
 Dockerfile                            # Multi-stage build of the application image
+docker/nginx/conf.d/default.conf      # Nginx reverse-proxy config (TLS termination, HTTP→HTTPS redirect)
+docker/nginx/generate-certs.sh        # Generates a local self-signed cert (gitignored output)
 requests.http                         # Ready-made HTTP requests
 docs/ARCHITECTURE.md                  # Design decisions and how the pieces fit
 ```
@@ -285,6 +308,19 @@ volume, so the guard short-circuits the seeder on every start after the first.
 **IntelliJ: `Could not find or load main class com.amigoscode.Application`** — the Maven
 module isn't registered. Maven tool window → *Reload All Maven Projects*, then delete and
 re-create the run configuration from the gutter arrow next to `main()`.
+
+**nginx: `host not found in upstream "app"`** (Option 3 only) — nginx started before the
+`app` container was healthy. `depends_on: condition: service_healthy` normally prevents
+this; if it still happens, `docker compose --profile full up --build` again.
+
+**Port 443 (or 80) already in use** (Option 3 only) — find the holder with
+`lsof -nP -iTCP:443 -sTCP:LISTEN` and stop it, or another process (e.g. a local
+webserver) is bound to it.
+
+**nginx crash-loops on startup** (Option 3 only) — usually means
+`./docker/nginx/generate-certs.sh` was never run: Docker then bind-mounts an
+empty `certs/` directory, nginx finds no `localhost.crt`/`localhost.key`, and
+fails to start. Run the script and bring the stack back up.
 
 ## License
 

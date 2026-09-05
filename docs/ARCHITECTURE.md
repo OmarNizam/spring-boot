@@ -336,6 +336,38 @@ delete, the null-id insert path) are identical whichever entry point a caller us
 against a mocked service; `SoftwareEngineerMcpIntegrationTest` drives the running
 server through a real MCP client (`@SpringBootTest`, needs Postgres).
 
+## HTTPS / TLS termination
+
+TLS terminates in front of the app, not inside it — Spring Boot's embedded
+Tomcat has no `server.ssl.*` configuration and never will for this setup.
+`docker compose --profile full` adds an `nginx` service (`docker/nginx/`)
+that:
+
+- Redirects plain `http://` on port 80 to `https://` on port 443 with a
+  `308` (not `301`/`302`, so a `POST`/`PUT` body isn't dropped by a client
+  that follows the redirect instead of calling HTTPS directly).
+- Terminates TLS on 443 using a self-signed certificate
+  (`docker/nginx/generate-certs.sh`, output gitignored) — a local/dev cert
+  story only, no ACME/Let's Encrypt, no HSTS, no production posture.
+- Proxies to `app:8080` over plain HTTP on the internal Compose network.
+  `app`'s container port is no longer published to the host (`expose`
+  instead of `ports`), so nginx is the only way in from outside Docker.
+- Gives `/mcp` its own `location` block with buffering disabled and a long
+  read timeout — the Streamable-HTTP transport keeps a `text/event-stream`
+  response open and depends on the `mcp-session-id` response header
+  surviving the proxy; nginx's default buffered mode can hang or truncate
+  that.
+- Sets `SERVER_FORWARD_HEADERS_STRATEGY=NATIVE` on the `app` container
+  (compose environment only, not `application.properties`) so embedded
+  Tomcat's `RemoteIpValve` trusts nginx's `X-Forwarded-Proto`/`X-Forwarded-For`
+  and rewrites `request.getScheme()`/`isSecure()` accordingly — otherwise the
+  `Location` header on `POST /api/v1/software-engineers` would read `http://`
+  even though the client connected over HTTPS.
+
+This is scoped to the `full` Compose profile only. `./mvnw spring-boot:run`
+and the plain jar (Options 1 and 2 in the README) still serve plain HTTP on
+8080, unaffected — there is no nginx in those paths.
+
 ## Still open
 
 In rough order of value:
