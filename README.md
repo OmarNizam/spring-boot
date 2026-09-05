@@ -317,6 +317,11 @@ this; if it still happens, `docker compose --profile full up --build` again.
 `lsof -nP -iTCP:443 -sTCP:LISTEN` and stop it, or another process (e.g. a local
 webserver) is bound to it.
 
+**nginx crash-loops on startup** (Option 3 only) — usually means
+`./docker/nginx/generate-certs.sh` was never run: Docker then bind-mounts an
+empty `certs/` directory, nginx finds no `localhost.crt`/`localhost.key`, and
+fails to start. Run the script and bring the stack back up.
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).

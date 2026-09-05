@@ -30,7 +30,7 @@ services:
       - full
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: nginx-reverse-proxy
     ports:
       - "80:80"
@@ -45,7 +45,12 @@ services:
       - spring-boot_db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 443 || exit 1"]
+      # busybox nc's -z support is unreliable on nginx:alpine; wget --spider
+      # against a real endpoint behind the proxy is a more trustworthy probe.
+      # Uses 127.0.0.1, not localhost: this image's /etc/hosts resolves
+      # "localhost" to ::1 only, and nginx (listening on IPv4) then refuses
+      # the connection since busybox wget doesn't fall back to another address.
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://127.0.0.1/api/v1/software-engineers || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

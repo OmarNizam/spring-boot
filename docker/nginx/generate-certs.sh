@@ -44,6 +44,8 @@ IP.1 = 127.0.0.1
 EOF
 ) -extensions v3_req
 
+chmod 600 "$KEY"
+
 echo "Generated self-signed certificate:"
 echo "  $CRT"
 echo "  $KEY"
