@@ -74,7 +74,7 @@ services:
       - spring-boot_db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U amigoscode"]
+      test: ["CMD-SHELL", "pg_isready -U amigoscode -d postgres-spring-boot"]
       interval: 10s
       timeout: 5s
       retries: 5
