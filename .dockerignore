@@ -25,3 +25,4 @@ requests.http
 SECURITY.md
 CONTRIBUTING.md
 LICENSE
+docker/nginx/certs/

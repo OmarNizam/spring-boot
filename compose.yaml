@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: spring-boot-app
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/postgres-spring-boot
       SPRING_DATASOURCE_USERNAME: amigoscode
@@ -13,6 +13,7 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: "false"
       SPRING_PROFILES_ACTIVE: docker
+      SERVER_FORWARD_HEADERS_STRATEGY: NATIVE
     depends_on:
       db:
         condition: service_healthy
@@ -25,6 +26,30 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    profiles:
+      - full
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-reverse-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - spring-boot_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 443 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     profiles:
       - full
 
